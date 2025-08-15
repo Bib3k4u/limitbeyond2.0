@@ -2,7 +2,7 @@ import axios from 'axios';
 import cache from '@/services/cache';
 
 // const API_URL = 'http://localhost:8080/api'; // Adjust the base URL as needed
-const API_URL = 'https://limitbeyond2-0.onrender.com/api';
+const API_URL = 'https://gym-management-9waw.onrender.com/api';
 
 
 // Create an axios instance
