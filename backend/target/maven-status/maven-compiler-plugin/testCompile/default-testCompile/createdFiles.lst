@@ -1,0 +1,4 @@
+com\limitbeyond\controller\AuthControllerTest.class
+com\limitbeyond\controller\DietChatControllerTest.class
+com\limitbeyond\controller\UserControllerTest.class
+com\limitbeyond\controller\FeedbackControllerTest.class
