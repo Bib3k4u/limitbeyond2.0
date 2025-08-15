@@ -1,6 +1,8 @@
 import axios from 'axios';
 
-const API_URL = 'http://localhost:8080/api/users';
+// const API_URL = 'http://localhost:8080/api/users';
+const API_URL = 'https://limitbeyond2-0.onrender.com/api/users';
+
 
 // Create an axios instance
 const axiosInstance = axios.create({
