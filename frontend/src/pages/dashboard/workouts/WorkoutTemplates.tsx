@@ -17,8 +17,230 @@ import {
 import { useToast } from '@/hooks/use-toast';
 import { workoutApi } from '@/services/api/workoutApi';
 import { exerciseTemplatesApi } from '@/services/api/exerciseTemplatesApi';
-import { workoutTemplates, WorkoutTemplate } from '@/data/workoutTemplates';
 import userService from '@/services/api/userService';
+
+// Define types
+interface ExerciseTemplate {
+  id: string;
+  name: string;
+  primaryMuscleGroup: { name: string };
+  secondaryMuscleGroup?: { name: string };
+  description: string;
+  requiresWeight: boolean;
+}
+
+interface WorkoutDay {
+  day: number;
+  name: string;
+  focus: string;
+  exercises: Array<{
+    exerciseName: string;
+    sets: number;
+    reps: number;
+    weight?: number;
+    notes?: string;
+  }>;
+}
+
+interface WorkoutTemplate {
+  id: string;
+  name: string;
+  description: string;
+  days: WorkoutDay[];
+}
+
+// Predefined workout templates
+const workoutTemplates: WorkoutTemplate[] = [
+  {
+    id: 'beginner-fullbody',
+    name: 'Beginner Full Body',
+    description: 'A simple full-body workout for beginners, 3 days per week.',
+    days: [
+      {
+        day: 1,
+        name: 'Full Body A',
+        focus: 'Compound movements for strength and endurance',
+        exercises: [
+          { exerciseName: 'Squat', sets: 3, reps: 10, weight: 20 },
+          { exerciseName: 'Bench Press', sets: 3, reps: 10, weight: 20 },
+          { exerciseName: 'Bent-Over Dumbbell Row', sets: 3, reps: 10, weight: 10 },
+          { exerciseName: 'Plank', sets: 3, reps: 30, weight: 0 },
+          { exerciseName: 'Dumbbell Curl', sets: 3, reps: 12, weight: 5 },
+        ],
+      },
+      {
+        day: 2,
+        name: 'Full Body B',
+        focus: 'Balanced strength and mobility',
+        exercises: [
+          { exerciseName: 'Deadlift', sets: 3, reps: 8, weight: 30 },
+          { exerciseName: 'Overhead Press', sets: 3, reps: 10, weight: 10 },
+          { exerciseName: 'Lat Pulldown', sets: 3, reps: 10, weight: 20 },
+          { exerciseName: 'Leg Raise', sets: 3, reps: 12, weight: 0 },
+          { exerciseName: 'Triceps Pushdown', sets: 3, reps: 12, weight: 10 },
+        ],
+      },
+      {
+        day: 3,
+        name: 'Full Body C',
+        focus: 'Endurance and core stability',
+        exercises: [
+          { exerciseName: 'Leg Press', sets: 3, reps: 12, weight: 40 },
+          { exerciseName: 'Incline Bench Press', sets: 3, reps: 10, weight: 15 },
+          { exerciseName: 'Face Pull', sets: 3, reps: 12, weight: 10 },
+          { exerciseName: 'Russian Twist', sets: 3, reps: 15, weight: 0 },
+          { exerciseName: 'Hammer Curl', sets: 3, reps: 12, weight: 5 },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'intermediate-push-pull-legs',
+    name: 'Push Pull Legs (Intermediate)',
+    description: 'A 6-day split for balanced muscle growth.',
+    days: [
+      {
+        day: 1,
+        name: 'Push A',
+        focus: 'Chest, Shoulders, Triceps',
+        exercises: [
+          { exerciseName: 'Bench Press', sets: 4, reps: 8, weight: 30 },
+          { exerciseName: 'Overhead Press', sets: 4, reps: 8, weight: 15 },
+          { exerciseName: 'Incline Dumbbell Press', sets: 3, reps: 10, weight: 12 },
+          { exerciseName: 'Lateral Raise', sets: 3, reps: 12, weight: 5 },
+          { exerciseName: 'Triceps Dips', sets: 3, reps: 10, weight: 0 },
+        ],
+      },
+      {
+        day: 2,
+        name: 'Pull A',
+        focus: 'Back, Biceps, Rear Delts',
+        exercises: [
+          { exerciseName: 'Pull-Up', sets: 4, reps: 8, weight: 0 },
+          { exerciseName: 'Barbell Row', sets: 4, reps: 8, weight: 25 },
+          { exerciseName: 'Face Pull', sets: 3, reps: 12, weight: 10 },
+          { exerciseName: 'Barbell Curl', sets: 3, reps: 10, weight: 10 },
+          { exerciseName: 'Shrug', sets: 3, reps: 12, weight: 20 },
+        ],
+      },
+      {
+        day: 3,
+        name: 'Legs A',
+        focus: 'Quads, Hamstrings, Calves',
+        exercises: [
+          { exerciseName: 'Squat', sets: 4, reps: 8, weight: 40 },
+          { exerciseName: 'Romanian Deadlift', sets: 4, reps: 8, weight: 30 },
+          { exerciseName: 'Leg Extension', sets: 3, reps: 12, weight: 15 },
+          { exerciseName: 'Seated Calf Raise', sets: 4, reps: 15, weight: 20 },
+        ],
+      },
+      {
+        day: 4,
+        name: 'Push B',
+        focus: 'Chest, Shoulders, Triceps',
+        exercises: [
+          { exerciseName: 'Incline Bench Press', sets: 4, reps: 8, weight: 25 },
+          { exerciseName: 'Dumbbell Shoulder Press', sets: 3, reps: 10, weight: 12 },
+          { exerciseName: 'Cable Fly', sets: 3, reps: 12, weight: 8 },
+          { exerciseName: 'Skullcrusher', sets: 3, reps: 10, weight: 10 },
+          { exerciseName: 'Plank', sets: 3, reps: 45, weight: 0 },
+        ],
+      },
+      {
+        day: 5,
+        name: 'Pull B',
+        focus: 'Back, Biceps, Traps',
+        exercises: [
+          { exerciseName: 'Deadlift', sets: 4, reps: 6, weight: 40 },
+          { exerciseName: 'Lat Pulldown', sets: 4, reps: 10, weight: 25 },
+          { exerciseName: 'Seated Cable Row', sets: 3, reps: 10, weight: 20 },
+          { exerciseName: 'Hammer Curl', sets: 3, reps: 10, weight: 8 },
+          { exerciseName: 'Reverse Pec Deck Fly', sets: 3, reps: 12, weight: 10 },
+        ],
+      },
+      {
+        day: 6,
+        name: 'Legs B',
+        focus: 'Glutes, Hamstrings, Calves',
+        exercises: [
+          { exerciseName: 'Bulgarian Split Squat', sets: 3, reps: 10, weight: 10 },
+          { exerciseName: 'Leg Curl', sets: 4, reps: 10, weight: 15 },
+          { exerciseName: 'Hip Thrust', sets: 3, reps: 12, weight: 30 },
+          { exerciseName: 'Standing Calf Raise', sets: 4, reps: 15, weight: 20 },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'advanced-bodybuilding',
+    name: 'Advanced Bodybuilding Split',
+    description: 'A 5-day split for hypertrophy and strength.',
+    days: [
+      {
+        day: 1,
+        name: 'Chest & Triceps',
+        focus: 'Upper body push',
+        exercises: [
+          { exerciseName: 'Flat Bench Press', sets: 4, reps: 6, weight: 40 },
+          { exerciseName: 'Incline Dumbbell Press', sets: 4, reps: 8, weight: 20 },
+          { exerciseName: 'Dips (Chest Focus)', sets: 3, reps: 10, weight: 0 },
+          { exerciseName: 'Cable Crossover', sets: 3, reps: 12, weight: 10 },
+          { exerciseName: 'Close-Grip Bench Press', sets: 3, reps: 8, weight: 25 },
+          { exerciseName: 'Overhead Triceps Extension', sets: 3, reps: 10, weight: 10 },
+        ],
+      },
+      {
+        day: 2,
+        name: 'Back & Biceps',
+        focus: 'Pull movements for thickness',
+        exercises: [
+          { exerciseName: 'Pull-Up', sets: 4, reps: 8, weight: 0 },
+          { exerciseName: 'Barbell Row', sets: 4, reps: 8, weight: 30 },
+          { exerciseName: 'T-Bar Row', sets: 3, reps: 10, weight: 25 },
+          { exerciseName: 'Barbell Curl', sets: 4, reps: 10, weight: 12 },
+          { exerciseName: 'Preacher Curl', sets: 3, reps: 10, weight: 8 },
+        ],
+      },
+      {
+        day: 3,
+        name: 'Legs',
+        focus: 'Quads, Hamstrings, Glutes',
+        exercises: [
+          { exerciseName: 'Squat', sets: 5, reps: 6, weight: 50 },
+          { exerciseName: 'Romanian Deadlift', sets: 4, reps: 8, weight: 35 },
+          { exerciseName: 'Leg Press', sets: 3, reps: 12, weight: 60 },
+          { exerciseName: 'Leg Extension', sets: 3, reps: 12, weight: 15 },
+          { exerciseName: 'Seated Calf Raise', sets: 4, reps: 15, weight: 25 },
+        ],
+      },
+      {
+        day: 4,
+        name: 'Shoulders & Abs',
+        focus: 'Delts and core',
+        exercises: [
+          { exerciseName: 'Overhead Press', sets: 4, reps: 8, weight: 20 },
+          { exerciseName: 'Lateral Raise', sets: 4, reps: 12, weight: 8 },
+          { exerciseName: 'Rear Delt Fly', sets: 3, reps: 12, weight: 10 },
+          { exerciseName: 'Face Pull', sets: 3, reps: 12, weight: 10 },
+          { exerciseName: 'Hanging Leg Raise', sets: 3, reps: 12, weight: 0 },
+          { exerciseName: 'Cable Crunch', sets: 3, reps: 15, weight: 15 },
+        ],
+      },
+      {
+        day: 5,
+        name: 'Arms & Calves',
+        focus: 'Biceps, Triceps, Calves',
+        exercises: [
+          { exerciseName: 'EZ-Bar Curl', sets: 4, reps: 10, weight: 12 },
+          { exerciseName: 'Hammer Curl', sets: 3, reps: 10, weight: 8 },
+          { exerciseName: 'Skullcrusher', sets: 4, reps: 10, weight: 12 },
+          { exerciseName: 'Triceps Rope Pushdown', sets: 3, reps: 12, weight: 10 },
+          { exerciseName: 'Standing Calf Raise', sets: 5, reps: 15, weight: 30 },
+        ],
+      },
+    ],
+  },
+];
 
 const WorkoutTemplates = () => {
   const navigate = useNavigate();
@@ -28,7 +250,7 @@ const WorkoutTemplates = () => {
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
   const [showCopyDialog, setShowCopyDialog] = useState(false);
   const [copying, setCopying] = useState(false);
-  const [exercises, setExercises] = useState<any[]>([]);
+  const [exercises, setExercises] = useState<ExerciseTemplate[]>([]);
 
   // Fetch exercises on component mount
   useEffect(() => {
@@ -47,13 +269,11 @@ const WorkoutTemplates = () => {
         });
       }
     };
-
     fetchExercises();
   }, [toast]);
 
   const handleCopyTemplate = async () => {
     if (!selectedTemplate || !selectedDay || !selectedDate) return;
-    
     setCopying(true);
     try {
       const day = selectedTemplate.days.find(d => d.day === selectedDay);
@@ -63,16 +283,19 @@ const WorkoutTemplates = () => {
       const profile = await userService.getCurrentUserProfile();
       if (!profile) throw new Error('User profile not found');
 
-      // Find exercises by name and create workout sets
-      const workoutSets = [];
-      const missingExercises = [];
-      
       // Helper: normalize names (lowercase, trim, remove punctuation)
-      const normalize = (s: any) => (s || '').toString().trim().toLowerCase().replace(/[^a-z0-9\s]/g, '').replace(/\s+/g, ' ');
+      const normalize = (s: string) =>
+        (s || '')
+          .toString()
+          .trim()
+          .toLowerCase()
+          .replace(/[^a-z0-9\s]/g, '')
+          .replace(/\s+/g, ' ');
 
       // Small Levenshtein distance implementation for fuzzy matching
       const levenshtein = (a: string, b: string) => {
-        const al = a.length, bl = b.length;
+        const al = a.length,
+          bl = b.length;
         if (al === 0) return bl;
         if (bl === 0) return al;
         const matrix = Array.from({ length: al + 1 }, () => new Array(bl + 1).fill(0));
@@ -84,12 +307,15 @@ const WorkoutTemplates = () => {
             matrix[i][j] = Math.min(
               matrix[i - 1][j] + 1,
               matrix[i][j - 1] + 1,
-              matrix[i - 1][j - 1] + cost
+              matrix[i - 1][j - 1] + cost,
             );
           }
         }
         return matrix[al][bl];
       };
+
+      const workoutSets: any[] = [];
+      const missingExercises: string[] = [];
 
       for (const templateExercise of day.exercises) {
         const rawTarget = templateExercise.exerciseName || '';
@@ -100,12 +326,16 @@ const WorkoutTemplates = () => {
 
         // 2) substring match (exercise name contains target or vice versa)
         if (!foundExercise) {
-          foundExercise = exercises.find(ex => normalize(ex.name).includes(target) || target.includes(normalize(ex.name)));
+          foundExercise = exercises.find(
+            ex =>
+              normalize(ex.name).includes(target) ||
+              target.includes(normalize(ex.name)),
+          );
         }
 
         // 3) fuzzy match via Levenshtein distance with threshold (25% of length or min 2)
         if (!foundExercise) {
-          let best: any = null;
+          let best: ExerciseTemplate | null = null;
           let bestDist = Infinity;
           for (const ex of exercises) {
             const exName = normalize(ex.name);
@@ -125,7 +355,6 @@ const WorkoutTemplates = () => {
         if (!foundExercise) {
           console.warn(`Exercise not found: ${templateExercise.exerciseName}`);
           missingExercises.push(templateExercise.exerciseName);
-          // Skip this exercise and continue with others
           continue;
         }
 
@@ -135,7 +364,7 @@ const WorkoutTemplates = () => {
             exerciseId: foundExercise.id,
             reps: templateExercise.reps,
             weight: templateExercise.weight,
-            notes: templateExercise.notes
+            notes: templateExercise.notes,
           });
         }
       }
@@ -144,30 +373,17 @@ const WorkoutTemplates = () => {
         throw new Error('No valid exercises found in template. Please check if exercises exist in your database.');
       }
 
-      // Create workout from template
-      const workoutData = {
+      // Prefill form via sessionStorage
+      const prefill = {
         name: `${day.name} - ${selectedTemplate.name}`,
         description: `Template: ${selectedTemplate.description}\nFocus: ${day.focus}`,
         memberId: profile.id,
-        date: format(selectedDate, 'yyyy-MM-dd'),
-        sets: workoutSets
+        scheduledDate: format(selectedDate, 'yyyy-MM-dd'),
+        sets: workoutSets,
       };
-
-      await workoutApi.create(workoutData);
-      
-      // Show success message with information about missing exercises
-      let successMessage = `Workout "${day.name}" copied successfully with ${workoutSets.length} sets!`;
-      if (missingExercises.length > 0) {
-        successMessage += `\n\nNote: ${missingExercises.length} exercise(s) were skipped because they weren't found in your database: ${missingExercises.join(', ')}`;
-      }
-      
-      toast({
-        title: 'Success',
-        description: successMessage,
-      });
-      
+      sessionStorage.setItem('workoutPrefill', JSON.stringify(prefill));
       setShowCopyDialog(false);
-      navigate('/dashboard/workouts');
+      navigate('/dashboard/workouts/new?prefill=1');
     } catch (error: any) {
       console.error('Error copying template:', error);
       toast({
@@ -189,11 +405,7 @@ const WorkoutTemplates = () => {
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-2">
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => navigate('/dashboard/workouts')}
-        >
+        <Button variant="outline" size="sm" onClick={() => navigate('/dashboard/workouts')}>
           <ChevronLeft className="h-4 w-4" />
         </Button>
         <div>
@@ -203,30 +415,27 @@ const WorkoutTemplates = () => {
       </div>
 
       <div className="grid gap-6">
-        {workoutTemplates.map((template) => (
+        {workoutTemplates.map(template => (
           <Card key={template.id} className="p-6">
             <div className="mb-4">
               <h2 className="text-xl font-semibold">{template.name}</h2>
               <p className="text-muted-foreground">{template.description}</p>
             </div>
-
             <div className="grid gap-4">
-              {template.days.map((day) => (
+              {template.days.map(day => (
                 <div key={day.day} className="border rounded-lg p-4">
                   <div className="flex justify-between items-start mb-3">
                     <div>
-                      <h3 className="font-medium">Day {day.day}: {day.name}</h3>
+                      <h3 className="font-medium">
+                        Day {day.day}: {day.name}
+                      </h3>
                       <p className="text-sm text-muted-foreground">{day.focus}</p>
                     </div>
-                    <Button
-                      size="sm"
-                      onClick={() => openCopyDialog(template, day.day)}
-                    >
+                    <Button size="sm" onClick={() => openCopyDialog(template, day.day)}>
                       <Copy className="h-4 w-4 mr-2" />
                       Copy Day
                     </Button>
                   </div>
-
                   <div className="grid gap-2">
                     {day.exercises.map((exercise, index) => (
                       <div key={index} className="flex justify-between items-center text-sm">
@@ -257,17 +466,18 @@ const WorkoutTemplates = () => {
               Select a date for your new workout. The template will be copied with all exercises and sets.
             </DialogDescription>
           </DialogHeader>
-          
+
           <div className="py-4">
             <div className="mb-4">
               <h4 className="font-medium mb-2">
-                {selectedTemplate?.name} - Day {selectedDay}: {selectedTemplate?.days.find(d => d.day === selectedDay)?.name}
+                {selectedTemplate?.name} - Day {selectedDay}:{' '}
+                {selectedTemplate?.days.find(d => d.day === selectedDay)?.name}
               </h4>
               <p className="text-sm text-muted-foreground">
                 {selectedTemplate?.days.find(d => d.day === selectedDay)?.focus}
               </p>
             </div>
-            
+
             <CalendarComponent
               mode="single"
               selected={selectedDate}
@@ -275,13 +485,18 @@ const WorkoutTemplates = () => {
               className="rounded-md border"
             />
           </div>
-          
+
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowCopyDialog(false)}>
               Cancel
             </Button>
             <Button onClick={handleCopyTemplate} disabled={copying || !selectedDate}>
-              {copying ? 'Copying...' : 'Copy Workout'}
+              {copying ? 'Copying...' : (
+                <>
+                  <Copy className="h-4 w-4 mr-2" />
+                  Copy Workout
+                </>
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -290,4 +505,4 @@ const WorkoutTemplates = () => {
   );
 };
 
-export default WorkoutTemplates; 
+export default WorkoutTemplates;

@@ -19,6 +19,9 @@ const AccountSettings: React.FC<AccountSettingsProps> = ({ userProfile }) => {
     lastName: userProfile?.lastName || '',
     email: userProfile?.email || '',
     phoneNumber: userProfile?.phoneNumber || '',
+    heightCm: userProfile?.heightCm || '',
+    weightKg: '',
+    level: (userProfile?.level as any) || ''
   });
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -34,7 +37,16 @@ const AccountSettings: React.FC<AccountSettingsProps> = ({ userProfile }) => {
 
     setLoading(true);
     try {
-      await userService.updateProfile(userProfile.id, formData);
+      const payload: any = {
+        firstName: formData.firstName,
+        lastName: formData.lastName,
+        email: formData.email,
+        phoneNumber: formData.phoneNumber,
+      };
+      if (formData.heightCm) payload.heightCm = Number(formData.heightCm);
+      if (formData.weightKg) payload.weightKg = Number(formData.weightKg);
+      if (formData.level) payload.level = formData.level;
+      await userService.updateProfile(userProfile.id, payload);
       toast({
         title: "Profile updated",
         description: "Your account information has been updated successfully.",
@@ -111,6 +123,43 @@ const AccountSettings: React.FC<AccountSettingsProps> = ({ userProfile }) => {
                     className="bg-lb-darker"
                   />
                 </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="heightCm">Height (cm)</Label>
+                  <Input 
+                    id="heightCm" 
+                    name="heightCm"
+                    type="number"
+                    placeholder="e.g. 175"
+                    value={formData.heightCm as any}
+                    onChange={handleChange}
+                    className="bg-lb-darker"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="weightKg">Update Weight (kg)</Label>
+                  <Input 
+                    id="weightKg" 
+                    name="weightKg"
+                    type="number"
+                    step="0.1"
+                    placeholder="e.g. 70.5"
+                    value={formData.weightKg as any}
+                    onChange={handleChange}
+                    className="bg-lb-darker"
+                  />
+                </div>
+                <div className="space-y-2 md:col-span-2">
+                  <Label htmlFor="level">Level</Label>
+                  <Input 
+                    id="level" 
+                    name="level"
+                    placeholder="BEGINNER / INTERMEDIATE / PROFESSIONAL"
+                    value={formData.level as any}
+                    onChange={handleChange}
+                    className="bg-lb-darker"
+                  />
+                </div>
               </div>
               
               <Button type="submit" className="mt-6" disabled={loading}>
@@ -176,6 +225,41 @@ const AccountSettings: React.FC<AccountSettingsProps> = ({ userProfile }) => {
           </CardFooter>
         </Card>
       </div>
+
+      <Card className="glass-card">
+        <CardHeader>
+          <CardTitle>Progress</CardTitle>
+          <CardDescription>Track your weight and BMI over time.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {userProfile?.weightHistory && userProfile.weightHistory.length > 0 ? (
+            <div className="w-full">
+              <div className="text-sm text-muted-foreground mb-2">
+                Latest: {userProfile.currentWeightKg || userProfile.weightHistory[userProfile.weightHistory.length - 1].weightKg} kg
+                {userProfile?.heightCm ? (
+                  <> · BMI: {(() => {
+                    const h = (userProfile.heightCm || 0) / 100;
+                    const w = userProfile.currentWeightKg || userProfile.weightHistory[userProfile.weightHistory.length - 1].weightKg || 0;
+                    return h > 0 ? (w / (h * h)).toFixed(1) : '—';
+                  })()}</>
+                ) : null}
+              </div>
+              <div className="h-40 bg-lb-darker/50 rounded border border-white/10 flex items-end gap-1 p-2 overflow-x-auto">
+                {userProfile.weightHistory.slice(-30).map((pt, idx, arr) => {
+                  const weights = arr.map(a => a.weightKg);
+                  const min = Math.min(...weights);
+                  const max = Math.max(...weights);
+                  const norm = max === min ? 1 : (pt.weightKg - min) / (max - min);
+                  const height = 16 + Math.round(norm * 120);
+                  return <div key={pt.timestamp} className="w-2 bg-lb-accent/70" style={{ height }} title={`${new Date(pt.timestamp).toLocaleDateString()}: ${pt.weightKg} kg`} />
+                })}
+              </div>
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">No weight history yet. Add your weight above and save.</p>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 };

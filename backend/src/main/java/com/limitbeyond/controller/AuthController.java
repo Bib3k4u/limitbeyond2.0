@@ -93,6 +93,17 @@ public class AuthController {
             user.setFirstName(signupRequest.getFirstName());
             user.setLastName(signupRequest.getLastName());
             user.setPhoneNumber(signupRequest.getPhoneNumber());
+            // Fitness profile fields
+            if (signupRequest.getHeightCm() != null)
+                user.setHeightCm(signupRequest.getHeightCm());
+            if (signupRequest.getWeightKg() != null) {
+                user.setCurrentWeightKg(signupRequest.getWeightKg());
+                java.util.List<User.WeightEntry> history = new java.util.ArrayList<>();
+                history.add(new User.WeightEntry(System.currentTimeMillis(), signupRequest.getWeightKg()));
+                user.setWeightHistory(history);
+            }
+            if (signupRequest.getLevel() != null)
+                user.setLevel(signupRequest.getLevel());
 
             // Set roles
             Set<Role> roles = new HashSet<>();
@@ -104,7 +115,7 @@ public class AuthController {
             user.setRoles(roles);
 
             // Make non-trainers active by default
-            if (!roles.contains(Role.TRAINER) && !roles.contains(Role.MEMBER)) {
+            if (!roles.contains(Role.TRAINER) && !roles.contains(Role.ADMIN)) {
                 user.setActive(true);
             }
 

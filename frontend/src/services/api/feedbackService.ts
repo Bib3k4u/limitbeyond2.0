@@ -1,7 +1,9 @@
 import axios from 'axios';
 
-// const API_URL = 'http://localhost:8080/api/feedback';
-const API_URL = 'https://gym-management-9waw.onrender.com/api/feedback';
+const API_URL = 'http://localhost:8080/api/feedback';
+// const API_URL = 'http://13.217.88.71:8080/api/feedback'; 
+
+// const API_URL = 'https://gym-management-v0n4.onrender.com/api/feedback';
 
 
 // Create an axios instance

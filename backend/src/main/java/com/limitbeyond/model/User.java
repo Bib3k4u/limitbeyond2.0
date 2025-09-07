@@ -20,6 +20,43 @@ public class User {
     private String assignedTrainer; // Only for MEMBER role
     private Set<String> assignedMembers = new HashSet<>(); // Only for TRAINER role
 
+    // Fitness profile
+    private Double heightCm; // user's height in centimeters
+    private Double currentWeightKg; // current body weight in kg
+    private String level; // BEGINNER | INTERMEDIATE | PROFESSIONAL
+
+    // Simple weight history tracking (timestamp millis -> weight kg)
+    private java.util.List<WeightEntry> weightHistory = new java.util.ArrayList<>();
+
+    public static class WeightEntry {
+        private Long timestamp;
+        private Double weightKg;
+
+        public WeightEntry() {
+        }
+
+        public WeightEntry(Long timestamp, Double weightKg) {
+            this.timestamp = timestamp;
+            this.weightKg = weightKg;
+        }
+
+        public Long getTimestamp() {
+            return timestamp;
+        }
+
+        public void setTimestamp(Long timestamp) {
+            this.timestamp = timestamp;
+        }
+
+        public Double getWeightKg() {
+            return weightKg;
+        }
+
+        public void setWeightKg(Double weightKg) {
+            this.weightKg = weightKg;
+        }
+    }
+
     // Default constructor
     public User() {
     }
@@ -69,6 +106,22 @@ public class User {
         return assignedMembers;
     }
 
+    public Double getHeightCm() {
+        return heightCm;
+    }
+
+    public Double getCurrentWeightKg() {
+        return currentWeightKg;
+    }
+
+    public String getLevel() {
+        return level;
+    }
+
+    public java.util.List<WeightEntry> getWeightHistory() {
+        return weightHistory;
+    }
+
     // Setters
     public void setId(String id) {
         this.id = id;
@@ -112,5 +165,21 @@ public class User {
 
     public void setAssignedMembers(Set<String> assignedMembers) {
         this.assignedMembers = assignedMembers;
+    }
+
+    public void setHeightCm(Double heightCm) {
+        this.heightCm = heightCm;
+    }
+
+    public void setCurrentWeightKg(Double currentWeightKg) {
+        this.currentWeightKg = currentWeightKg;
+    }
+
+    public void setLevel(String level) {
+        this.level = level;
+    }
+
+    public void setWeightHistory(java.util.List<WeightEntry> weightHistory) {
+        this.weightHistory = weightHistory;
     }
 }

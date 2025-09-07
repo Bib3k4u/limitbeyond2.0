@@ -6,6 +6,7 @@ import { exerciseTemplatesApi } from '@/services/api/exerciseTemplatesApi';
 import { axiosInstance } from '@/services/api/axiosInstance';
 import { WorkoutStats } from '@/types/workout';
 import { Line } from 'react-chartjs-2';
+import Select from 'react-select';
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -36,15 +37,12 @@ export function WorkoutStatsChart() {
   const [exercises, setExercises] = useState<any[]>([]);
   const [selectedExercise, setSelectedExercise] = useState<string | null>(null);
 
-  // Attempt to fetch muscle groups on mount; if endpoint missing fall back to empty and we'll
-  // derive groups from stats when available.
   useEffect(() => {
     const fetchMuscleGroups = async () => {
       try {
         const resp = await axiosInstance.get('/muscle-groups');
         setMuscleGroups(resp.data || []);
       } catch (e) {
-        // Backend may not expose /muscle-groups; we'll derive options from stats later
         console.debug('No /muscle-groups endpoint; will use derived muscle groups from stats');
         setMuscleGroups([]);
       }
@@ -52,28 +50,21 @@ export function WorkoutStatsChart() {
     fetchMuscleGroups();
   }, []);
 
-  // Fetch workouts & stats whenever filters change
   useEffect(() => {
     const fetchStats = async () => {
       setLoading(true);
       try {
         const endDate = new Date();
-        const startDate = subMonths(endDate, 1); // Last month's data
+        const startDate = subMonths(endDate, 1);
         let response;
-
         if (selectedExercise) {
-          // If exercise selected, fetch all workouts then filter sets by exercise id
           response = await workoutApi.getByDateRange(startDate.toISOString(), endDate.toISOString());
         } else if (selectedMuscleGroup) {
-          // Use backend endpoint to get workouts by muscle group
           response = await workoutApi.getByMuscleGroup(selectedMuscleGroup);
         } else {
           response = await workoutApi.getByDateRange(startDate.toISOString(), endDate.toISOString());
         }
-
         const workouts = response?.data || [];
-
-        // If exercise selected, filter sets to include only that exercise
         let processedWorkouts = workouts;
         if (selectedExercise) {
           processedWorkouts = workouts.map((w: any) => {
@@ -83,17 +74,12 @@ export function WorkoutStatsChart() {
             };
           }).filter((w: any) => (w.sets || []).length > 0);
         }
-
         const stats: WorkoutStats = processWorkoutData(processedWorkouts);
         setStats(stats);
-
-        // If we didn't get muscle groups from backend, derive top groups from stats
         if ((!muscleGroups || muscleGroups.length === 0) && stats.muscleGroupDistribution) {
           const derived = stats.muscleGroupDistribution.map(m => ({ id: m.muscleGroup, name: m.muscleGroup }));
           setMuscleGroups(derived);
         }
-
-        // If muscle group selected, fetch exercises for that muscle group to populate exercise filter
         if (selectedMuscleGroup) {
           try {
             const etResp = await exerciseTemplatesApi.getByMuscleGroup(selectedMuscleGroup);
@@ -111,7 +97,6 @@ export function WorkoutStatsChart() {
         setLoading(false);
       }
     };
-
     fetchStats();
   }, [selectedMuscleGroup, selectedExercise]);
 
@@ -164,36 +149,92 @@ export function WorkoutStatsChart() {
     },
   };
 
+  const muscleGroupOptions = [
+    { value: '', label: 'All' },
+    ...muscleGroups.map(mg => ({ value: mg.id, label: mg.name }))
+  ];
+
+  const exerciseOptions = [
+    { value: '', label: 'All' },
+    ...exercises.map(ex => ({ value: ex.id, label: ex.name }))
+  ];
+
   return (
     <Card className="p-6">
       <div className="flex items-center space-x-4 mb-4">
-        <div>
+        <div className="w-48">
           <label className="text-sm font-medium">Muscle Group</label>
-          <select
-            className="block mt-1 p-2 bg-transparent border rounded"
-            value={selectedMuscleGroup || ''}
-            onChange={(e) => { setSelectedMuscleGroup(e.target.value || null); setSelectedExercise(null); }}
-          >
-            <option value="">All</option>
-            {muscleGroups.map((mg) => (
-              <option key={mg.id} value={mg.id}>{mg.name}</option>
-            ))}
-          </select>
+          <Select
+            className="mt-1 text-black"
+            classNamePrefix="select"
+            options={muscleGroupOptions}
+            value={muscleGroupOptions.find(opt => opt.value === selectedMuscleGroup)}
+            onChange={(selectedOption) => {
+              setSelectedMuscleGroup(selectedOption?.value || null);
+              setSelectedExercise(null);
+            }}
+            styles={{
+              option: (provided, state) => ({
+                ...provided,
+                backgroundColor: 'rgba(0, 0, 0, 0.1)',
+                color: 'white',
+                ':hover': {
+                  backgroundColor: 'rgba(0, 0, 0, 0.2)',
+                },
+              }),
+              control: (provided) => ({
+                ...provided,
+                backgroundColor: 'transparent',
+                borderColor: '#ccc',
+                color: 'white',
+              }),
+              singleValue: (provided) => ({
+                ...provided,
+                color: 'white',
+              }),
+              menu: (provided) => ({
+                ...provided,
+                backgroundColor: 'rgba(0, 0, 0, 0.3)',
+              }),
+            }}
+          />
         </div>
-
-        <div>
+        <div className="w-48">
           <label className="text-sm font-medium">Exercise</label>
-          <select
-            className="block mt-1 p-2 bg-transparent border rounded"
-            value={selectedExercise || ''}
-            onChange={(e) => setSelectedExercise(e.target.value || null)}
-            disabled={exercises.length === 0}
-          >
-            <option value="">All</option>
-            {exercises.map((ex) => (
-              <option key={ex.id} value={ex.id}>{ex.name}</option>
-            ))}
-          </select>
+          <Select
+            className="mt-1 text-black"
+            classNamePrefix="select"
+            options={exerciseOptions}
+            value={exerciseOptions.find(opt => opt.value === selectedExercise)}
+            onChange={(selectedOption) => {
+              setSelectedExercise(selectedOption?.value || null);
+            }}
+            isDisabled={exercises.length === 0}
+            styles={{
+              option: (provided, state) => ({
+                ...provided,
+                backgroundColor: 'rgba(0, 0, 0, 0.1)',
+                color: 'white',
+                ':hover': {
+                  backgroundColor: 'rgba(0, 0, 0, 0.2)',
+                },
+              }),
+              control: (provided) => ({
+                ...provided,
+                backgroundColor: 'transparent',
+                borderColor: '#ccc',
+                color: 'white',
+              }),
+              singleValue: (provided) => ({
+                ...provided,
+                color: 'white',
+              }),
+              menu: (provided) => ({
+                ...provided,
+                backgroundColor: 'rgba(0, 0, 0, 0.3)',
+              }),
+            }}
+          />
         </div>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
@@ -210,11 +251,9 @@ export function WorkoutStatsChart() {
           <p className="text-sm text-muted-foreground">Total Volume</p>
         </div>
       </div>
-
       <div className="h-[300px]">
         <Line data={chartData} options={options} />
       </div>
-
       <div className="mt-6">
         <h4 className="text-sm font-semibold mb-2">Most Trained Muscle Groups</h4>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
@@ -238,7 +277,6 @@ export function WorkoutStatsChart() {
   );
 }
 
-// Helper function to process workout data into stats
 function processWorkoutData(workouts: any[]): WorkoutStats {
   const stats: WorkoutStats = {
     totalWorkouts: workouts.length,
@@ -247,45 +285,30 @@ function processWorkoutData(workouts: any[]): WorkoutStats {
     muscleGroupDistribution: [],
     workoutsByDate: [],
   };
-
-  // Create a map to track muscle groups
   const muscleGroupCounts = new Map<string, number>();
-
-  // Create a map to track daily stats
   const dailyStats = new Map<string, { volume: number; count: number }>();
-
   workouts.forEach(workout => {
     const date = format(new Date(workout.scheduledDate || workout.completedDate), 'yyyy-MM-dd');
     let dailyVolume = 0;
-
-    // Process sets
     workout.sets.forEach(set => {
       if (set.completed && set.weight && set.reps) {
         const setVolume = set.weight * set.reps;
         dailyVolume += setVolume;
         stats.totalVolume += setVolume;
       }
-
-      // Count muscle groups
       set.exercise.muscleGroups.forEach(group => {
         const count = muscleGroupCounts.get(group.name) || 0;
         muscleGroupCounts.set(group.name, count + 1);
       });
     });
-
-    // Update daily stats
     const existing = dailyStats.get(date) || { volume: 0, count: 0 };
     dailyStats.set(date, {
       volume: existing.volume + dailyVolume,
       count: existing.count + 1,
     });
   });
-
-  // Convert muscle group counts to array
   stats.muscleGroupDistribution = Array.from(muscleGroupCounts.entries())
     .map(([muscleGroup, count]) => ({ muscleGroup, count }));
-
-  // Convert daily stats to array
   stats.workoutsByDate = Array.from(dailyStats.entries())
     .map(([date, stats]) => ({
       date,
@@ -293,6 +316,5 @@ function processWorkoutData(workouts: any[]): WorkoutStats {
       count: stats.count,
     }))
     .sort((a, b) => a.date.localeCompare(b.date));
-
   return stats;
 }

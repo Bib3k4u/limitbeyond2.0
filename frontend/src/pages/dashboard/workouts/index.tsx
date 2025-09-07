@@ -12,6 +12,7 @@ const Workouts = () => {
       <Route path="templates" element={<WorkoutTemplates />} />
       <Route path=":id" element={<WorkoutDetail />} />
       <Route path=":id/edit" element={<WorkoutForm />} />
+      <Route path="edit/:id" element={<WorkoutForm />} />
     </Routes>
   );
 };

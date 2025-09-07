@@ -178,6 +178,22 @@ public class UserController {
                 currentUser.setEmail(request.getEmail());
             }
 
+            // Update fitness profile
+            if (request.getHeightCm() != null) {
+                currentUser.setHeightCm(request.getHeightCm());
+            }
+            if (request.getLevel() != null) {
+                currentUser.setLevel(request.getLevel());
+            }
+            if (request.getWeightKg() != null) {
+                currentUser.setCurrentWeightKg(request.getWeightKg());
+                java.util.List<User.WeightEntry> history = currentUser.getWeightHistory();
+                if (history == null)
+                    history = new java.util.ArrayList<>();
+                history.add(new User.WeightEntry(System.currentTimeMillis(), request.getWeightKg()));
+                currentUser.setWeightHistory(history);
+            }
+
             userRepository.save(currentUser);
             return ResponseEntity.ok("Profile updated successfully");
         } catch (Exception e) {
@@ -218,6 +234,9 @@ public class UserController {
         private String lastName;
         private String email;
         private String phoneNumber;
+        private Double heightCm;
+        private Double weightKg;
+        private String level;
 
         // Getters
         public String getFirstName() {
@@ -236,6 +255,18 @@ public class UserController {
             return phoneNumber;
         }
 
+        public Double getHeightCm() {
+            return heightCm;
+        }
+
+        public Double getWeightKg() {
+            return weightKg;
+        }
+
+        public String getLevel() {
+            return level;
+        }
+
         // Setters
         public void setFirstName(String firstName) {
             this.firstName = firstName;
@@ -251,6 +282,18 @@ public class UserController {
 
         public void setPhoneNumber(String phoneNumber) {
             this.phoneNumber = phoneNumber;
+        }
+
+        public void setHeightCm(Double heightCm) {
+            this.heightCm = heightCm;
+        }
+
+        public void setWeightKg(Double weightKg) {
+            this.weightKg = weightKg;
+        }
+
+        public void setLevel(String level) {
+            this.level = level;
         }
     }
 

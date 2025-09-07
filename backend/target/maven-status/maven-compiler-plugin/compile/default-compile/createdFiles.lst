@@ -40,6 +40,7 @@ com\limitbeyond\controller\DietChatController.class
 com\limitbeyond\dto\workout\WorkoutResponse$SimpleExerciseTemplate.class
 com\limitbeyond\config\ExerciseDataInitializer.class
 com\limitbeyond\controller\AdminPaymentController.class
+com\limitbeyond\controller\HealthController.class
 com\limitbeyond\model\DietChat.class
 com\limitbeyond\model\User.class
 com\limitbeyond\repository\WorkoutRepository.class

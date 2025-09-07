@@ -1,7 +1,8 @@
 import axios from 'axios';
 
-// const API_URL = 'http://localhost:8080/api/auth';
-const API_URL = 'https://gym-management-9waw.onrender.com/api/auth';
+const API_URL = 'http://localhost:8080/api/auth';
+// const API_URL = 'http://13.217.88.71:8080/api/auth'; 
+// const API_URL = 'https://gym-management-v0n4.onrender.com/api/auth';
 
 // Create an axios instance
 const axiosInstance = axios.create({
@@ -75,6 +76,9 @@ export interface SignupData {
   lastName: string;
   phoneNumber: string;
   role: 'ADMIN' | 'TRAINER' | 'MEMBER';
+  heightCm?: number;
+  weightKg?: number;
+  level?: 'BEGINNER' | 'INTERMEDIATE' | 'PROFESSIONAL';
 }
 
 export interface SigninData {

@@ -31,6 +31,13 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
             throws ServletException, IOException {
+
+        // Skip JWT processing for health endpoint
+        if (shouldSkipFilter(request)) {
+            filterChain.doFilter(request, response);
+            return;
+        }
+
         try {
             String jwt = getJwtFromRequest(request);
 
@@ -49,6 +56,11 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         }
 
         filterChain.doFilter(request, response);
+    }
+
+    private boolean shouldSkipFilter(HttpServletRequest request) {
+        String path = request.getRequestURI();
+        return path.startsWith("/api/health/") || path.equals("/api/health");
     }
 
     private String getJwtFromRequest(HttpServletRequest request) {

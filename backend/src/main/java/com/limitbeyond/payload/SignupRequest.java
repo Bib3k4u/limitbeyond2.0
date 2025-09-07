@@ -28,6 +28,11 @@ public class SignupRequest {
 
     private String phoneNumber;
 
+    // New fitness profile fields
+    private Double heightCm;
+    private Double weightKg;
+    private String level; // BEGINNER | INTERMEDIATE | PROFESSIONAL
+
     // Getters and Setters
     public String getUsername() {
         return username;
@@ -83,5 +88,29 @@ public class SignupRequest {
 
     public void setPhoneNumber(String phoneNumber) {
         this.phoneNumber = phoneNumber;
+    }
+
+    public Double getHeightCm() {
+        return heightCm;
+    }
+
+    public void setHeightCm(Double heightCm) {
+        this.heightCm = heightCm;
+    }
+
+    public Double getWeightKg() {
+        return weightKg;
+    }
+
+    public void setWeightKg(Double weightKg) {
+        this.weightKg = weightKg;
+    }
+
+    public String getLevel() {
+        return level;
+    }
+
+    public void setLevel(String level) {
+        this.level = level;
     }
 }

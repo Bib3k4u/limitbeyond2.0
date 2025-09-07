@@ -124,6 +124,12 @@ public class DietChatController {
             DietChat dietChat = dietChatRepository.findById(chatId)
                     .orElseThrow(() -> new RuntimeException("Diet chat not found"));
 
+            // Only trainers and admins can reply to diet chats, not members
+            if (currentUser.getRoles().contains(Role.MEMBER) && !currentUser.getRoles().contains(Role.TRAINER)
+                    && !currentUser.getRoles().contains(Role.ADMIN)) {
+                return ResponseEntity.status(403).body("Members are not allowed to reply to diet chats");
+            }
+
             DietChat.DietChatMessage reply = new DietChat.DietChatMessage();
             reply.setSenderId(currentUser.getId());
             reply.setContent(request.getContent());

@@ -50,8 +50,7 @@ ChartJS.register(
   LineElement,
   Title,
   Tooltip,
-  Legend
-  ,
+  Legend,
   Filler
 );
 
@@ -72,9 +71,10 @@ export const WorkoutList = () => {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [workoutToDelete, setWorkoutToDelete] = useState<Workout | null>(null);
   const [deleting, setDeleting] = useState(false);
-  const [dateRange, setDateRange] = useState<{ from: Date | undefined; to: Date | undefined }>(
-    { from: undefined, to: undefined }
-  );
+  const [dateRange, setDateRange] = useState<{ from: Date | undefined; to: Date | undefined }>({
+    from: undefined,
+    to: undefined,
+  });
   // Graph state
   const [selectedExercise, setSelectedExercise] = useState<string>('all');
   const [exercises, setExercises] = useState<Array<{ id: string; name: string }>>([]);
@@ -89,7 +89,6 @@ export const WorkoutList = () => {
     const fetchData = async () => {
       try {
         setLoading(true);
-
         // Check user role and load members list for admin/trainer
         try {
           const profile = await userService.getCurrentUserProfile();
@@ -102,7 +101,6 @@ export const WorkoutList = () => {
           }
         } catch (e: any) {
           console.error('WorkoutList: failed to load profile or members', e?.message || e);
-          // show a non-blocking toast so admin notices
           toast({ title: 'Warning', description: 'Unable to load members. Check your authentication.', variant: 'destructive' });
         }
 
@@ -119,42 +117,45 @@ export const WorkoutList = () => {
         }
         const allWorkouts = workoutsResponse?.data || [];
 
-  // Respect role-based visibility:
+        // Respect role-based visibility:
         // - ADMIN: see all workouts
         // - TRAINER: see workouts for assigned members only
         // - MEMBER: see only their own workouts
         try {
           const profile = await userService.getCurrentUserProfile();
-          // requestedMemberId is already used server-side; here enforce visibility
+          let filteredWorkouts = [...allWorkouts];
+
           if (profile.roles?.includes('ADMIN')) {
             console.debug('User is ADMIN, showing all workouts', allWorkouts.length);
-            setWorkouts(allWorkouts);
+            filteredWorkouts = allWorkouts;
           } else if (profile.roles?.includes('TRAINER')) {
             const assigned = profile.assignedMembers || [];
             console.debug('User is TRAINER, assignedMembers=', assigned);
-            // If trainer requested a specific member, ensure it's assigned to them
             if (requestedMemberId) {
               if (!assigned.includes(requestedMemberId)) {
                 toast({ title: 'Access denied', description: 'You are not assigned to this member.', variant: 'destructive' });
-                // fallback to assigned members' workouts
-                setWorkouts(allWorkouts.filter(w => w.member && assigned.includes(w.member.id)));
+                filteredWorkouts = allWorkouts.filter(w => w.member && assigned.includes(w.member.id));
               } else {
-                setWorkouts(allWorkouts.filter(w => w.member && w.member.id === requestedMemberId));
+                filteredWorkouts = allWorkouts.filter(w => w.member && w.member.id === requestedMemberId);
               }
             } else {
-              setWorkouts(allWorkouts.filter(w => w.member && assigned.includes(w.member.id)));
+              filteredWorkouts = allWorkouts.filter(w => w.member && assigned.includes(w.member.id));
             }
           } else if (profile.roles?.includes('MEMBER')) {
-            // Members can only view their own workouts; ignore requestedMemberId
-            setWorkouts(allWorkouts.filter(w => w.member && w.member.id === profile.id));
-          } else {
-            // default fallback
-            setWorkouts(allWorkouts);
+            filteredWorkouts = allWorkouts.filter(w => w.member && w.member.id === profile.id);
           }
+
+          // Sort workouts by date (newest first)
+          filteredWorkouts.sort((a, b) =>
+            new Date(b.scheduledDate).getTime() - new Date(a.scheduledDate).getTime()
+          );
+          setWorkouts(filteredWorkouts);
         } catch (err) {
-          // If profile fetch fails, fall back to showing all workouts (safer) and log
           console.error('Failed to fetch profile for role-based filtering:', err);
-          setWorkouts(allWorkouts);
+          // Sort all workouts by date (newest first) as fallback
+          setWorkouts([...allWorkouts].sort((a, b) =>
+            new Date(b.scheduledDate).getTime() - new Date(a.scheduledDate).getTime()
+          ));
         }
 
         // Fetch exercises for filter
@@ -173,14 +174,12 @@ export const WorkoutList = () => {
         setLoading(false);
       }
     };
-
     fetchData();
   }, [toast, selectedMemberFilter, location.search]);
 
   // Filter workouts based on search and date range
   useEffect(() => {
-    let filtered = workouts;
-
+    let filtered = [...workouts];
     // Apply search filter
     if (searchTerm.trim()) {
       filtered = filtered.filter(workout =>
@@ -188,18 +187,15 @@ export const WorkoutList = () => {
         workout.description?.toLowerCase().includes(searchTerm.toLowerCase())
       );
     }
-
     // Apply date range filter
     if (dateRange.from || dateRange.to) {
       filtered = filtered.filter(workout => {
         const workoutDate = new Date(workout.scheduledDate);
         const fromDate = dateRange.from ? new Date(dateRange.from) : new Date(0);
         const toDate = dateRange.to ? new Date(dateRange.to) : new Date();
-
         return workoutDate >= fromDate && workoutDate <= toDate;
       });
     }
-
     setFilteredWorkouts(filtered);
   }, [workouts, searchTerm, dateRange]);
 
@@ -207,26 +203,19 @@ export const WorkoutList = () => {
   useEffect(() => {
     const generateVolumeData = async () => {
       if (workouts.length === 0) return;
-
       setGraphLoading(true);
       try {
-        let relevantWorkouts = workouts;
-
+        let relevantWorkouts = [...workouts];
         if (selectedExercise !== 'all') {
-          // Filter workouts that contain the selected exercise
           relevantWorkouts = workouts.filter(workout =>
             workout.sets.some(set => set.exercise.id === selectedExercise)
           );
         }
-
         // Group by date and calculate total volume
         const volumeMap = new Map<string, { volume: number; workoutNames: string[] }>();
-
         relevantWorkouts.forEach(workout => {
           const date = format(new Date(workout.scheduledDate), 'yyyy-MM-dd');
           let workoutVolume = 0;
-
-          // Calculate volume for this workout
           workout.sets.forEach(set => {
             if (selectedExercise === 'all' || set.exercise.id === selectedExercise) {
               const weight = set.weight || 0;
@@ -234,8 +223,6 @@ export const WorkoutList = () => {
               workoutVolume += weight * reps;
             }
           });
-
-          // Include workouts even with 0 volume to show all workout days
           if (volumeMap.has(date)) {
             const existing = volumeMap.get(date)!;
             existing.volume += workoutVolume;
@@ -244,16 +231,14 @@ export const WorkoutList = () => {
             volumeMap.set(date, { volume: workoutVolume, workoutNames: [workout.name] });
           }
         });
-
-        // Convert to array and sort by date
+        // Convert to array and sort by date (ascending for graph)
         const data: VolumeDataPoint[] = Array.from(volumeMap.entries())
           .map(([date, { volume, workoutNames }]) => ({
             date,
-            volume: Math.round(volume * 100) / 100, // Round to 2 decimal places
+            volume: Math.round(volume * 100) / 100,
             workoutName: workoutNames.join(', ')
           }))
           .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-
         setVolumeData(data);
       } catch (error) {
         console.error('Error generating volume data:', error);
@@ -261,13 +246,11 @@ export const WorkoutList = () => {
         setGraphLoading(false);
       }
     };
-
     generateVolumeData();
   }, [workouts, selectedExercise]);
 
   const handleDeleteWorkout = async () => {
     if (!workoutToDelete) return;
-
     setDeleting(true);
     try {
       await workoutApi.delete(workoutToDelete.id);
@@ -347,7 +330,6 @@ export const WorkoutList = () => {
             </Select>
           </div>
         </div>
-
         {graphLoading ? (
           <div className="flex justify-center items-center h-64">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-lb-accent"></div>

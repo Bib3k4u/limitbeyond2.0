@@ -1,7 +1,9 @@
 import axios from 'axios';
 
-// const API_URL = 'http://localhost:8080/api/users';
-const API_URL = 'https://gym-management-9waw.onrender.com/api/users';
+const API_URL = 'http://localhost:8080/api/users';
+// const API_URL = 'http://13.217.88.71:8080/api/users'; 
+
+// const API_URL = 'https://gym-management-v0n4.onrender.com/api/users';
 
 
 // Create an axios instance
@@ -61,6 +63,10 @@ export interface UserProfile {
   active: boolean;
   assignedTrainer?: string;
   assignedMembers?: string[];
+  heightCm?: number;
+  currentWeightKg?: number;
+  level?: 'BEGINNER' | 'INTERMEDIATE' | 'PROFESSIONAL' | string;
+  weightHistory?: Array<{ timestamp: number; weightKg: number }>;
 }
 
 export interface AssignTrainerRequest {
@@ -72,6 +78,9 @@ export interface UpdateProfileRequest {
   lastName?: string;
   email?: string;
   phoneNumber?: string;
+  heightCm?: number;
+  weightKg?: number;
+  level?: 'BEGINNER' | 'INTERMEDIATE' | 'PROFESSIONAL';
 }
 
 export const userService = {

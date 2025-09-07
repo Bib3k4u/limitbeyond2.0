@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
-import { Loader2, Plus, Trash2, Search, Calculator, Check } from 'lucide-react';
+import { Loader2, Plus, Trash2, Search, Calculator, Check, ArrowUp } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -26,6 +26,7 @@ import {
 import { useToast } from '@/hooks/use-toast';
 import { workoutApi } from '@/services/api/workoutApi';
 import { exerciseTemplatesApi } from '@/services/api/exerciseTemplatesApi';
+import { muscleGroupsApi } from '@/services/api/muscleGroupsApi';
 import userService from '@/services/api/userService';
 import { WorkoutRequest } from '@/types/workout';
 import { format } from 'date-fns';
@@ -35,6 +36,7 @@ interface ExerciseTemplate {
   id: string;
   name: string;
   description?: string;
+  muscleGroups?: Array<{ id: string; name: string }>;
 }
 
 interface UserProfile {
@@ -68,9 +70,12 @@ interface SelectedExercise {
 const WorkoutForm = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
   const [exercises, setExercises] = useState<ExerciseTemplate[]>([]);
+  const [muscleGroups, setMuscleGroups] = useState<Array<{ id: string; name: string }>>([]);
+  const [selectedMuscleGroup, setSelectedMuscleGroup] = useState<string>('all');
   const [members, setMembers] = useState<UserProfile[]>([]);
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -112,6 +117,41 @@ const WorkoutForm = () => {
     }
   }, [searchTerm, exercises]);
 
+  // Helper: fetch exercises optionally by muscle group
+  const fetchExercises = async (muscleGroupId?: string) => {
+    try {
+      if (muscleGroupId && muscleGroupId !== 'all') {
+        const resp: any = await exerciseTemplatesApi.getByMuscleGroup(muscleGroupId);
+        const data = resp?.data || [];
+        setExercises(data);
+        setFilteredExercises(
+          (data as ExerciseTemplate[]).filter((exercise) =>
+            searchTerm.trim() === ''
+              ? true
+              : exercise.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                exercise.description?.toLowerCase().includes(searchTerm.toLowerCase())
+          )
+        );
+      } else {
+        const resp: any = await exerciseTemplatesApi.getAll();
+        const data = resp?.data || [];
+        setExercises(data);
+        setFilteredExercises(
+          (data as ExerciseTemplate[]).filter((exercise) =>
+            searchTerm.trim() === ''
+              ? true
+              : exercise.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                exercise.description?.toLowerCase().includes(searchTerm.toLowerCase())
+          )
+        );
+      }
+    } catch (e) {
+      console.error('Failed to load exercises', e);
+      setExercises([]);
+      setFilteredExercises([]);
+    }
+  };
+
   // Load initial data
   useEffect(() => {
     const loadData = async () => {
@@ -119,9 +159,16 @@ const WorkoutForm = () => {
         setLoadingData(true);
         
         // Load exercises
-        const exercisesResponse = await exerciseTemplatesApi.getAll();
-        if (exercisesResponse?.data) {
-          setExercises(exercisesResponse.data);
+        await fetchExercises();
+
+        // Load muscle groups
+        try {
+          const mgResp: any = await muscleGroupsApi.getAll();
+          const mgData = mgResp?.data || [];
+          setMuscleGroups(mgData);
+        } catch (e) {
+          console.warn('Failed to load muscle groups', e);
+          setMuscleGroups([]);
         }
 
         // Load current user
@@ -136,6 +183,80 @@ const WorkoutForm = () => {
             if (membersResponse) {
               setMembers(membersResponse);
             }
+          }
+        }
+
+        // Prefill from copyFrom query param when opening from detail copy
+        const params = new URLSearchParams(location.search);
+        const copyFromId = params.get('copyFrom');
+        const prefillDate = params.get('date');
+        // Prefill from sessionStorage (templates flow)
+        if (!id && params.get('prefill') === '1') {
+          try {
+            const raw = sessionStorage.getItem('workoutPrefill');
+            if (raw) {
+              const pre = JSON.parse(raw);
+              form.reset({
+                name: pre.name || '',
+                description: pre.description || '',
+                memberId: pre.memberId || '',
+                scheduledDate: pre.scheduledDate || '',
+                notes: ''
+              });
+              const exerciseMap = new Map<string, SelectedExercise>();
+              (pre.sets || []).forEach((s: any) => {
+                const exId = s.exerciseId;
+                if (!exerciseMap.has(exId)) {
+                  const exName = (exercises.find(e => e.id === exId)?.name) || 'Exercise';
+                  exerciseMap.set(exId, { exerciseId: exId, exerciseName: exName, sets: [] });
+                }
+                exerciseMap.get(exId)!.sets.push({
+                  id: `new-${Date.now()}-${Math.random()}`,
+                  reps: s.reps,
+                  weight: s.weight || 0,
+                  notes: s.notes || ''
+                });
+              });
+              setSelectedExercises(Array.from(exerciseMap.values()));
+            }
+          } catch (e) {
+            console.error('Failed to apply prefill from sessionStorage', e);
+          }
+        }
+        if (!id && copyFromId) {
+          try {
+            const src = await workoutApi.getById(copyFromId);
+            const workout = src?.data;
+            if (workout) {
+              form.reset({
+                name: workout.name,
+                description: workout.description || '',
+                memberId: workout.member?.id || '',
+                scheduledDate: prefillDate || (workout.scheduledDate ? format(new Date(workout.scheduledDate), 'yyyy-MM-dd') : ''),
+                notes: ''
+              });
+
+              const exerciseMap = new Map<string, SelectedExercise>();
+              (workout.sets || []).forEach((set: any) => {
+                const exId = set.exercise.id;
+                if (!exerciseMap.has(exId)) {
+                  exerciseMap.set(exId, {
+                    exerciseId: exId,
+                    exerciseName: set.exercise.name,
+                    sets: []
+                  });
+                }
+                exerciseMap.get(exId)!.sets.push({
+                  id: `new-${Date.now()}-${Math.random()}`,
+                  reps: set.reps,
+                  weight: set.weight || 0,
+                  notes: set.notes || ''
+                });
+              });
+              setSelectedExercises(Array.from(exerciseMap.values()));
+            }
+          } catch (e) {
+            console.error('Failed to prefill from copyFrom', e);
           }
         }
 
@@ -189,6 +310,21 @@ const WorkoutForm = () => {
   // Compute current total volume for an exercise
   const computeCurrentVolume = (exercise: SelectedExercise) => {
     return exercise.sets.reduce((acc, s) => acc + ((s.weight || 0) * (s.reps || 0)), 0);
+  };
+
+  // Quick increment helpers for reps and weight
+  const incrementSetValue = (
+    exerciseIndex: number,
+    setIndex: number,
+    field: 'reps' | 'weight',
+    delta: number
+  ) => {
+    const current = selectedExercises[exerciseIndex].sets[setIndex][field] || 0;
+    const next =
+      field === 'reps'
+        ? Math.max(0, Math.round(current + delta))
+        : Math.max(0, parseFloat((current + delta).toFixed(1)));
+    updateSet(exerciseIndex, setIndex, field, next);
   };
 
   // Fetch previous workouts for the selected member (or current user) and compute previous volume per exercise
@@ -520,24 +656,28 @@ const WorkoutForm = () => {
 
             {selectedExercises.map((exercise, exerciseIndex) => (
               <Card key={exercise.exerciseId} className="p-4 bg-lb-card border-white/10">
-                <div className="flex justify-between items-start mb-4">
+                <div className="flex flex-col md:flex-row lg:flex-row xl:flex-row gap-2 justify-between items-start mb-4">
                   <div>
-                    <div className="flex items-center gap-3">
+                    <div className="flex flex-col md:flex-row lg:flex-row xl:flex-row items-start md:items-center lg:items-center xl:items-center gap-3">
                       <h3 className="font-semibold text-lg text-white">{exercise.exerciseName}</h3>
-                      {/* Previous volume tag */}
-                      <Badge variant="secondary" className="text-sm bg-white/5 text-gray-200">
-                        Prev: {Number((previousVolumes[exercise.exerciseId] || 0)).toFixed(0)} kg
-                      </Badge>
-                      {/* Current computed volume tag */}
-                      <Badge variant="secondary" className="text-sm bg-white/5 text-gray-200">
-                        Current: {Number(computeCurrentVolume(exercise)).toFixed(0)} kg
-                      </Badge>
+                     
                     </div>
                     <p className="text-sm text-gray-400">
                       {exercises.find(e => e.id === exercise.exerciseId)?.description || 'No description available'}
                     </p>
                   </div>
-                  <Button
+                   {/* Previous volume tag */}
+                   <div className="gap-2 flex justify-between w-full">
+                      <div className="gap-2 flex">
+                      <Badge variant="secondary" className="text-xs bg-white/10 text-orange-500">
+                        Prev: {Number((previousVolumes[exercise.exerciseId] || 0)).toFixed(0)} kg
+                      </Badge>
+                      {/* Current computed volume tag */}
+                      <Badge variant="secondary" className="text-xs bg-white/10 text-green-400">
+                        Current: {Number(computeCurrentVolume(exercise)).toFixed(0)} kg
+                      </Badge>
+                      </div>
+                      <Button
                     type="button"
                     variant="outline"
                     size="sm"
@@ -546,6 +686,8 @@ const WorkoutForm = () => {
                   >
                     <Trash2 className="h-4 w-4" />
                   </Button>
+                      </div>
+                  
                 </div>
 
                 <div className="space-y-3">
@@ -553,6 +695,7 @@ const WorkoutForm = () => {
                     <div key={set.id} className="flex flex-col sm:flex-row items-start sm:items-center gap-3 p-3 bg-lb-darker border border-white/10 rounded-lg">
                       <div className="flex-1 min-w-0">
                         <span className="text-sm font-medium text-white">Set {setIndex + 1}</span>
+                        
                       </div>
                       
                       <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 w-full sm:w-auto">
@@ -561,11 +704,32 @@ const WorkoutForm = () => {
                               type="number"
                             placeholder="Reps"
                             value={set.reps}
-                            onChange={(e) => updateSet(exerciseIndex, setIndex, 'reps', parseInt(e.target.value) || 0)}
-                            className="w-20 bg-lb-dark border-white/20 text-white"
+                            onChange={(e) => updateSet(exerciseIndex, setIndex, 'reps', parseInt(e.target.value) || 10)}
+                            className="w-16 bg-lb-dark border-white/20 text-white"
                             min="1"
                           />
                           <span className="text-sm text-gray-400">reps</span>
+                          <div className="flex gap-1">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => incrementSetValue(exerciseIndex, setIndex, 'reps', 2)}
+                              className="h-7 px-2 border-green-800 text-green-400"
+                            >
+                              +2
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => incrementSetValue(exerciseIndex, setIndex, 'reps', 5)}
+                              className="h-7 px-2 border-green-800 text-green-400 "
+                            >
+                              +5
+                            </Button>
+                          </div>
+                          <ArrowUp height={20} width={20} color="green"/>
                         </div>
 
                         <div className="flex items-center gap-2 w-full sm:w-auto">
@@ -574,11 +738,41 @@ const WorkoutForm = () => {
                             placeholder="Weight"
                             value={set.weight}
                             onChange={(e) => updateSet(exerciseIndex, setIndex, 'weight', parseFloat(e.target.value) || 0)}
-                            className="w-20 bg-lb-dark border-white/20 text-white"
+                            className="w-16 bg-lb-dark border-white/20 text-white"
                             min="0"
                               step="0.5"
                           />
                           <span className="text-sm text-gray-400">kg</span>
+                          <div className="flex gap-1">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => incrementSetValue(exerciseIndex, setIndex, 'weight', 2.5)}
+                              className="h-7 px-2 border-green-800 text-green-400"
+                            >
+                              +2.5
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => incrementSetValue(exerciseIndex, setIndex, 'weight', 5)}
+                              className="h-7 px-2 border-green-800 text-green-400"
+                            >
+                              +5
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => incrementSetValue(exerciseIndex, setIndex, 'weight', 10)}
+                              className="h-7 px-2 border-green-800 text-green-400"
+                            >
+                              +10
+                            </Button>
+                          </div>
+                          <ArrowUp height={20} width={20} color="green"/>
                         </div>
                       </div>
 
@@ -656,15 +850,42 @@ const WorkoutForm = () => {
               </div>
             </div>
 
-            <div className="mb-4">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-                <Input
-                  placeholder="Search exercises..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10 bg-lb-darker border-white/10 text-white placeholder:text-gray-400"
-                />
+            <div className="mb-4 space-y-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <div className="text-sm text-gray-300 mb-1">Filter by muscle group</div>
+                  <Select
+                    value={selectedMuscleGroup}
+                    onValueChange={(val) => {
+                      setSelectedMuscleGroup(val);
+                      fetchExercises(val === 'all' ? undefined : val);
+                    }}
+                  >
+                    <SelectTrigger className="bg-lb-darker border-white/10 text-white">
+                      <SelectValue placeholder="All muscle groups" />
+                    </SelectTrigger>
+                    <SelectContent className="bg-lb-card border-white/10">
+                      <SelectItem value="all" className="text-white hover:bg-lb-darker">All</SelectItem>
+                      {muscleGroups.map((mg) => (
+                        <SelectItem key={mg.id} value={mg.id} className="text-white hover:bg-lb-darker">
+                          {mg.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <div className="text-sm text-gray-300 mb-1">Search exercises</div>
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                    <Input
+                      placeholder="Search exercises..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      className="pl-10 bg-lb-darker border-white/10 text-white placeholder:text-gray-400"
+                    />
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -685,6 +906,18 @@ const WorkoutForm = () => {
                       <h3 className={`font-medium ${isSelected ? 'text-lb-accent' : 'text-white'}`}>
                         {exercise.name}
                       </h3>
+                      <div className="flex flex-wrap gap-2 mt-1">
+                        {Array.isArray((exercise as any).muscleGroups) && (exercise as any).muscleGroups[0] && (
+                          <Badge variant="secondary" className="text-xs bg-emerald-600/20 text-emerald-300 border-emerald-500/30">
+                            Primary: {(exercise as any).muscleGroups[0].name}
+                          </Badge>
+                        )}
+                        {Array.isArray((exercise as any).muscleGroups) && (exercise as any).muscleGroups[1] && (
+                          <Badge variant="secondary" className="text-xs bg-blue-600/20 text-blue-300 border-blue-500/30">
+                            Secondary: {(exercise as any).muscleGroups[1].name}
+                          </Badge>
+                        )}
+                      </div>
                       {exercise.description && (
                         <p className={`text-sm mt-1 ${isSelected ? 'text-lb-accent/80' : 'text-gray-400'}`}>
                           {exercise.description}

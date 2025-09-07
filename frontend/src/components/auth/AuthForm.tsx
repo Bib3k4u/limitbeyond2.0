@@ -27,7 +27,10 @@ const AuthForm: React.FC<AuthFormProps> = ({ type }) => {
     firstName: '',
     lastName: '',
     phoneNumber: '',
-    role: 'MEMBER'
+    role: 'MEMBER',
+    heightCm: undefined,
+    weightKg: undefined,
+    level: undefined
   });
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -195,6 +198,48 @@ const AuthForm: React.FC<AuthFormProps> = ({ type }) => {
                   onChange={handleChange}
                   className="bg-lb-darker"
                 />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="heightCm">Height (cm)</Label>
+                  <Input
+                    id="heightCm"
+                    name="heightCm"
+                    type="number"
+                    placeholder="e.g. 175"
+                    value={formData.heightCm as any || ''}
+                    onChange={(e) => setFormData(prev => ({ ...prev, heightCm: e.target.value ? Number(e.target.value) : undefined }))}
+                    className="bg-lb-darker"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="weightKg">Weight (kg)</Label>
+                  <Input
+                    id="weightKg"
+                    name="weightKg"
+                    type="number"
+                    step="0.1"
+                    placeholder="e.g. 70.5"
+                    value={formData.weightKg as any || ''}
+                    onChange={(e) => setFormData(prev => ({ ...prev, weightKg: e.target.value ? Number(e.target.value) : undefined }))}
+                    className="bg-lb-darker"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="level">Level</Label>
+                <Select value={formData.level} onValueChange={(v) => setFormData(prev => ({ ...prev, level: v as any }))}>
+                  <SelectTrigger className="bg-lb-darker">
+                    <SelectValue placeholder="Select your level" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="BEGINNER">Beginner</SelectItem>
+                    <SelectItem value="INTERMEDIATE">Intermediate</SelectItem>
+                    <SelectItem value="PROFESSIONAL">Professional</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
               
               <div className="space-y-2">

@@ -75,7 +75,8 @@ export default function AdminCheckins() {
         setRole(profile.roles?.[0] ?? null);
         // set QR target: admin -> admin checkins page, others -> member checkin page
         const base = window.location.origin.replace(':8081', ':8081');
-        const target = profile.roles?.includes('ADMIN') ? `${base}/dashboard/checkins` : `${base}/dashboard/checkin`;
+        // const target = profile.roles?.includes('ADMIN') ? `${base}/dashboard/checkins` : `${base}/dashboard/checkin`;
+        const target = 'https://limitbeyond.netlify.app/dashboard/checkin';
         setSingleQrUrl(target);
       } catch (e) {
         // ignore

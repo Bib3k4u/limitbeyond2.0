@@ -1,6 +1,5 @@
 package com.limitbeyond.security;
 
-import com.limitbeyond.security.CustomUserDetailsService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -20,7 +19,6 @@ import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
 import java.util.Arrays;
-import java.util.List;
 
 @Configuration
 @EnableWebSecurity
@@ -58,13 +56,16 @@ public class SecurityConfig {
                 .csrf(csrf -> csrf.disable())
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
+                        .requestMatchers("/api/health/**").permitAll()
                         .requestMatchers("/api/auth/**").permitAll()
                         .requestMatchers("/api/public/**").permitAll()
                         .requestMatchers("/api/exercise-templates/**").permitAll()
                         .requestMatchers("/api/muscle-groups/**").permitAll()
                         .requestMatchers("/error").permitAll()
                         .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
-                        .anyRequest().authenticated());
+                        .anyRequest().authenticated())
+                .httpBasic(basic -> basic.disable())
+                .formLogin(form -> form.disable());
 
         http.authenticationProvider(authenticationProvider());
         http.addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
@@ -78,7 +79,9 @@ public class SecurityConfig {
         configuration.setAllowedOrigins(Arrays.asList(
                 "http://localhost:8081",
                 "http://localhost:3000",
-                "http://localhost:5173"));
+                "http://localhost:5173",
+                "http://13.217.88.71:8080",
+                "http://13.217.88.71"));
         configuration.setAllowedMethods(Arrays.asList(
                 "GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS", "HEAD"));
         configuration.setAllowedHeaders(Arrays.asList(
@@ -96,8 +99,17 @@ public class SecurityConfig {
         configuration.setAllowCredentials(true);
         configuration.setMaxAge(3600L);
 
+        // Special CORS configuration for health endpoint - allow all origins
+        CorsConfiguration healthConfiguration = new CorsConfiguration();
+        healthConfiguration.setAllowedOriginPatterns(Arrays.asList("*"));
+        healthConfiguration.setAllowedMethods(Arrays.asList("GET", "OPTIONS", "HEAD"));
+        healthConfiguration.setAllowedHeaders(Arrays.asList("*"));
+        healthConfiguration.setAllowCredentials(false);
+        healthConfiguration.setMaxAge(3600L);
+
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", configuration);
+        source.registerCorsConfiguration("/api/health/**", healthConfiguration);
         return source;
     }
 }
