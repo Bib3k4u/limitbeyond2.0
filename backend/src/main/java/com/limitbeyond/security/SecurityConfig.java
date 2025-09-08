@@ -81,7 +81,7 @@ public class SecurityConfig {
                 "http://localhost:3000",
                 "http://localhost:5173",
                 "http://13.217.88.71:8080",
-                "http://13.217.88.71"));
+                "https://limitbeyond.netlify.app"));
         configuration.setAllowedMethods(Arrays.asList(
                 "GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS", "HEAD"));
         configuration.setAllowedHeaders(Arrays.asList(

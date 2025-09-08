@@ -29,6 +29,7 @@ com\limitbeyond\payload\LoginRequest.class
 com\limitbeyond\controller\FeedbackController$FeedbackRequest.class
 com\limitbeyond\controller\UserController.class
 com\limitbeyond\model\ExerciseTemplate.class
+com\limitbeyond\model\User$WeightEntry.class
 com\limitbeyond\service\impl\MuscleGroupServiceImpl.class
 com\limitbeyond\service\WorkoutService.class
 com\limitbeyond\dto\workout\WorkoutResponse$ExerciseEntry.class
