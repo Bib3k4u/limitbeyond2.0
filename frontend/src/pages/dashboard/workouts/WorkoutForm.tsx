@@ -1,7 +1,7 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
-import { Loader2, Plus, Trash2, Search, Calculator, Check, ArrowUp } from 'lucide-react';
+import { Loader2, Plus, Trash2, Search, Calculator, Check, ArrowUp, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -28,6 +28,7 @@ import { workoutApi } from '@/services/api/workoutApi';
 import { exerciseTemplatesApi } from '@/services/api/exerciseTemplatesApi';
 import { muscleGroupsApi } from '@/services/api/muscleGroupsApi';
 import userService from '@/services/api/userService';
+import { aiWorkoutApi } from '@/services/api/aiWorkout';
 import { WorkoutRequest } from '@/types/workout';
 import { format } from 'date-fns';
 
@@ -67,6 +68,14 @@ interface SelectedExercise {
   }>;
 }
 
+interface AISuggestion {
+  exerciseId: string;
+  sets: Array<{
+    reps: number;
+    weight: number;
+  }>;
+}
+
 const WorkoutForm = () => {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -85,6 +94,184 @@ const WorkoutForm = () => {
   const [selectedExercises, setSelectedExercises] = useState<SelectedExercise[]>([]);
   const [showExerciseSelector, setShowExerciseSelector] = useState(false);
   const [previousVolumes, setPreviousVolumes] = useState<Record<string, number>>({});
+  const [aiSuggestions, setAiSuggestions] = useState<Record<string, AISuggestion>>({});
+  const [loadingSuggestions, setLoadingSuggestions] = useState<Record<string, boolean>>({});
+
+  const handleAISuggestions = async (exerciseId: string) => {
+    if (!exerciseId) {
+      console.error('No exercise ID provided');
+      return;
+    }
+
+    try {
+      setLoadingSuggestions(prev => ({ ...prev, [exerciseId]: true }));
+      console.log('Requesting AI suggestions for exercise:', exerciseId);
+      
+      const response = await aiWorkoutApi.getProgressiveOverload(exerciseId);
+      console.log('AI Response:', response);
+
+      let suggestions;
+      if (response?.data?.sets && Array.isArray(response.data.sets) && response.data.sets.length > 0) {
+        console.log('Using AI suggestions:', response.data.sets);
+        suggestions = {
+          exerciseId,
+          sets: response.data.sets
+        };
+      } else {
+        console.log('Using default suggestions');
+        // Fallback to default suggestions
+        suggestions = {
+          exerciseId,
+          sets: [
+            { reps: 12, weight: 50 },
+            { reps: 10, weight: 55 },
+            { reps: 8, weight: 60 }
+          ]
+        };
+      }
+
+      console.log('Final suggestions object:', suggestions);
+
+      console.log('Setting suggestions:', suggestions);
+      
+      // Ensure we have valid sets
+      if (!Array.isArray(suggestions.sets) || suggestions.sets.length === 0) {
+        console.error('Invalid suggestions format:', suggestions);
+        toast({
+          title: 'Error',
+          description: 'Received invalid suggestions format. Using defaults.',
+          variant: 'destructive'
+        });
+        suggestions = {
+          exerciseId,
+          sets: [
+            { reps: 12, weight: 50 },
+            { reps: 10, weight: 55 },
+            { reps: 8, weight: 60 }
+          ]
+        };
+      }
+      
+      // Ensure each set has reps and weight
+      suggestions.sets = suggestions.sets.map((set, index) => ({
+        reps: set.reps || 12 - (index * 2),
+        weight: set.weight || 50 + (index * 5)
+      }));
+
+      console.log('Final processed suggestions:', suggestions);
+      
+      setAiSuggestions(prev => {
+        const newState = {
+          ...prev,
+          [exerciseId]: suggestions
+        };
+        console.log('New aiSuggestions state:', newState);
+        return newState;
+      });
+
+      toast({
+        title: 'AI Suggestions Ready',
+        description: `Got ${suggestions.sets.length} sets of suggestions. Click again to apply.`,
+        variant: 'default'
+      });
+    } catch (error: any) {
+      console.error('Failed to get AI suggestions:', error);
+      toast({
+        title: 'Error',
+        description: error?.response?.data?.message || 'Failed to get AI suggestions. Using defaults instead.',
+        variant: 'destructive'
+      });
+
+      // Set default suggestions even on error
+      const defaultSuggestions = {
+        exerciseId,
+        sets: [
+          { reps: 12, weight: 50 },
+          { reps: 10, weight: 55 },
+          { reps: 8, weight: 60 }
+        ]
+      };
+      setAiSuggestions(prev => ({
+        ...prev,
+        [exerciseId]: defaultSuggestions
+      }));
+    } finally {
+      setLoadingSuggestions(prev => ({ ...prev, [exerciseId]: false }));
+    }
+  };
+
+  const getAISuggestions = React.useCallback((exerciseId: string) => {
+    handleAISuggestions(exerciseId);
+  }, []);
+
+  const applyAISuggestions = React.useCallback((exerciseIndex: number) => {
+    console.log('Applying suggestions for exercise index:', exerciseIndex);
+    console.log('Current selected exercises:', selectedExercises);
+    console.log('Current AI suggestions:', aiSuggestions);
+
+    const exercise = selectedExercises[exerciseIndex];
+    if (!exercise?.exerciseId) {
+      console.error('No exercise ID found at index:', exerciseIndex);
+      return;
+    }
+
+    const suggestion = aiSuggestions[exercise.exerciseId];
+    console.log('Found suggestions for exercise:', exercise.exerciseName, suggestion);
+    
+    if (!suggestion?.sets?.length) {
+      console.error('No suggestions found for exercise:', exercise.exerciseName);
+      toast({
+        title: 'Error',
+        description: 'No suggestions available. Try requesting new suggestions.',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    try {
+      // Create a new array for all exercises
+      const updatedExercises = [...selectedExercises];
+      
+      // Create the updated exercise with suggested sets
+      const updatedExercise = {
+        ...exercise,
+        sets: suggestion.sets.map((set: any, index: number) => ({
+          id: `${exercise.exerciseId}-suggested-${index}-${Date.now()}`,
+          reps: Number(set.reps) || 10,
+          weight: Number(set.weight) || 50,
+          notes: `AI suggested: ${set.reps} reps at ${set.weight}kg`
+        }))
+      };
+
+      console.log('Updated exercise object:', updatedExercise);
+      
+      // Update the exercise at the specific index
+      updatedExercises[exerciseIndex] = updatedExercise;
+      setSelectedExercises(updatedExercises);
+      
+      console.log('New selected exercises state:', updatedExercises);
+
+      // Clear the suggestions after applying them
+      setAiSuggestions(prev => {
+        const newState = { ...prev };
+        delete newState[exercise.exerciseId];
+        return newState;
+      });
+
+      toast({
+        title: 'Success',
+        description: `Applied ${suggestion.sets.length} AI-suggested sets to ${exercise.exerciseName}`,
+        variant: 'default'
+      });
+    } catch (error) {
+      console.error('Error applying suggestions:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to apply suggestions. Please try again.',
+        variant: 'destructive'
+      });
+    }
+  }, [selectedExercises, aiSuggestions, toast]);
 
   const form = useForm<WorkoutFormData>({
     defaultValues: {
@@ -660,7 +847,48 @@ const WorkoutForm = () => {
                   <div>
                     <div className="flex flex-col md:flex-row lg:flex-row xl:flex-row items-start md:items-center lg:items-center xl:items-center gap-3">
                       <h3 className="font-semibold text-lg text-white">{exercise.exerciseName}</h3>
-                     
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className={`${
+                          exercise.exerciseId && loadingSuggestions?.[exercise.exerciseId]
+                            ? 'bg-lb-accent/20'
+                            : exercise.exerciseId && aiSuggestions?.[exercise.exerciseId]
+                            ? 'bg-lb-accent text-white hover:bg-lb-accent/90'
+                            : 'border-white/20 text-white hover:bg-white/10'
+                        }`}
+                        onClick={() => {
+                          console.log('AI button clicked for exercise:', exercise);
+                          if (!exercise.exerciseId) {
+                            console.error('No exercise ID found');
+                            return;
+                          }
+                          
+                          if (aiSuggestions?.[exercise.exerciseId]) {
+                            console.log('Applying existing suggestions');
+                            applyAISuggestions(exerciseIndex);
+                          } else {
+                            console.log('Getting new suggestions');
+                            getAISuggestions(exercise.exerciseId);
+                          }
+                        }}
+                      >
+                        {exercise.exerciseId && loadingSuggestions?.[exercise.exerciseId] ? (
+                          <>
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                             AI...
+                          </>
+                        ) : exercise.exerciseId && aiSuggestions?.[exercise.exerciseId] ? (
+                          <>
+                            <Check className="h-4 w-4" />
+                            Apply
+                          </>
+                        ) : (
+                          <>
+                            <Sparkles className="h-4 w-4" />                          </>
+                        )}
+                      </Button>
                     </div>
                     <p className="text-sm text-gray-400">
                       {exercises.find(e => e.id === exercise.exerciseId)?.description || 'No description available'}

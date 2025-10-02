@@ -2,8 +2,9 @@ import axios from 'axios';
 
 // const API_URL = 'http://107.21.176.88:8080/api/diet-chat';
 // const API_URL = 'http://13.217.88.71:8080/api/diet-chart'; 
+// const API_URL = 'http://localhost:8080/api/diet-chat';
 
-const API_URL = 'https://gym-management-latest.onrender.com/api/diet-chat';
+const API_URL = 'https://limitbeyond2-0.onrender.com/api/diet-chat';
 
 
 // Create an axios instance

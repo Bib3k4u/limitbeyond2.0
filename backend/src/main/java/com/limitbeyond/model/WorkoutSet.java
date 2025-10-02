@@ -12,6 +12,9 @@ public class WorkoutSet {
     @DBRef
     private ExerciseTemplate exercise;
 
+    @DBRef
+    private Workout workout;
+
     private int reps;
     private Double weight; // Optional, may be null for bodyweight exercises
     private String notes; // Optional notes about the set
@@ -86,5 +89,13 @@ public class WorkoutSet {
 
     public void setVolume(Double volume) {
         this.volume = volume;
+    }
+
+    public Workout getWorkout() {
+        return workout;
+    }
+
+    public void setWorkout(Workout workout) {
+        this.workout = workout;
     }
 }

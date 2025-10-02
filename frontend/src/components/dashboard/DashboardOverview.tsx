@@ -8,6 +8,7 @@ import { workoutApi } from '@/services/api/workoutApi';
 import { format, subDays } from 'date-fns';
 import { checkinApi } from '@/services/api/checkinApi';
 import { WorkoutStatsChart } from './WorkoutStatsChart';
+import { WorkoutNotifications } from './WorkoutNotifications';
 
 interface DashboardOverviewProps {
   userProfile: UserProfile | null;
@@ -365,6 +366,13 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({ userProfile }) =>
       {userRole === 'MEMBER' && (
         <div className="mb-6">
           <WorkoutStatsChart />
+        </div>
+      )}
+
+      {/* Workout Notifications */}
+      {userRole === 'MEMBER' && (
+        <div className="mb-4">
+          <WorkoutNotifications />
         </div>
       )}
 
