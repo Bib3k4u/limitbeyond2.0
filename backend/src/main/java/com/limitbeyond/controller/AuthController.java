@@ -55,7 +55,7 @@ public class AuthController {
         try {
             Authentication authentication = authenticationManager.authenticate(
                     new UsernamePasswordAuthenticationToken(
-                            loginRequest.getUsername(),
+                            loginRequest.getIdentifier(),
                             loginRequest.getPassword()));
 
             SecurityContextHolder.getContext().setAuthentication(authentication);
@@ -65,7 +65,7 @@ public class AuthController {
         } catch (Exception e) {
             logger.error("Error during authentication: ", e);
             Map<String, String> errorResponse = new HashMap<>();
-            errorResponse.put("message", "Invalid username or password");
+            errorResponse.put("message", "Invalid credentials. Please check your username / email / phone and password.");
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(errorResponse);
         }
     }

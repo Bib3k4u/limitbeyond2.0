@@ -94,9 +94,9 @@ export const userService = {
   },
 
   // Get all trainers (Admin only)
-  getAllTrainers: async (): Promise<UserProfile[]> => {
+  getAllTrainers: async (page: number = 0, size: number = 100): Promise<UserProfile[]> => {
     try {
-      const response = await axiosInstance.get('/trainers');
+      const response = await axiosInstance.get('/trainers', { params: { page, size } });
       return response.data;
     } catch (error) {
       console.error('Error fetching trainers:', error);
@@ -105,14 +105,31 @@ export const userService = {
   },
 
   // Get all members (Admin/Trainer)
-  getAllMembers: async (): Promise<UserProfile[]> => {
+  getAllMembers: async (page: number = 0, size: number = 100): Promise<UserProfile[]> => {
     try {
-      const response = await axiosInstance.get('/members');
+      const response = await axiosInstance.get('/members', { params: { page, size } });
       return response.data;
     } catch (error) {
       console.error('Error fetching members:', error);
       throw error;
     }
+  },
+
+  // Fetch all member pages (for dropdowns that need the full list)
+  getAllMembersPages: async (pageSize: number = 100): Promise<UserProfile[]> => {
+    const all: UserProfile[] = [];
+    let page = 0;
+    while (true) {
+      try {
+        const batch = await userService.getAllMembers(page, pageSize);
+        all.push(...batch);
+        if (batch.length < pageSize) break;
+        page++;
+      } catch {
+        break;
+      }
+    }
+    return all;
   },
 
   // Activate user (Admin only)

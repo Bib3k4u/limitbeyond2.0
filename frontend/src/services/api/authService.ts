@@ -81,7 +81,8 @@ export interface SignupData {
 }
 
 export interface SigninData {
-  username: string;
+  /** Accepts a username, email address, or phone number */
+  identifier: string;
   password: string;
 }
 
@@ -120,8 +121,8 @@ const authService = {
   signin: async (data: SigninData): Promise<AuthResponse> => {
     try {
       // Validate required fields
-      if (!data.username || !data.password) {
-        throw { message: 'Username and password are required' };
+      if (!data.identifier || !data.password) {
+        throw { message: 'Username / email / phone and password are required' };
       }
 
       const response = await axios({

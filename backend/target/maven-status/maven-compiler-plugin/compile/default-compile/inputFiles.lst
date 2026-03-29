@@ -31,6 +31,7 @@
 /Users/govindray/Desktop/limitbeyond2.0/backend/src/main/java/com/limitbeyond/repository/MuscleGroupRepository.java
 /Users/govindray/Desktop/limitbeyond2.0/backend/src/main/java/com/limitbeyond/repository/ExerciseTemplateRepository.java
 /Users/govindray/Desktop/limitbeyond2.0/backend/src/main/java/com/limitbeyond/security/CustomUserDetailsService.java
+/Users/govindray/Desktop/limitbeyond2.0/backend/src/main/java/com/limitbeyond/config/AsyncConfig.java
 /Users/govindray/Desktop/limitbeyond2.0/backend/src/main/java/com/limitbeyond/config/RestTemplateConfig.java
 /Users/govindray/Desktop/limitbeyond2.0/backend/src/main/java/com/limitbeyond/security/JwtAuthenticationFilter.java
 /Users/govindray/Desktop/limitbeyond2.0/backend/src/main/java/com/limitbeyond/service/UserService.java

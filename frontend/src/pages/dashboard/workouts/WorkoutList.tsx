@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { PageBanner } from '@/components/layout/PageBanner';
 import { Link } from 'react-router-dom';
 import { format } from 'date-fns';
-import { Plus, Calendar, Search, Copy, Edit, Trash2, TrendingUp, Filter, CheckCircle } from 'lucide-react';
+import { Plus, Calendar, Search, Copy, Edit, Trash2, TrendingUp, Filter, CheckCircle, Loader2 } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -61,12 +61,17 @@ interface VolumeDataPoint {
   workoutName: string;
 }
 
+const PAGE_SIZE = 20;
+
 export const WorkoutList = () => {
   const { toast } = useToast();
   const location = useLocation();
   const navigate = useNavigate();
   const [workouts, setWorkouts] = useState<Workout[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [currentPage, setCurrentPage] = useState(0);
+  const [hasMore, setHasMore] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [filteredWorkouts, setFilteredWorkouts] = useState<Workout[]>([]);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
@@ -95,12 +100,11 @@ export const WorkoutList = () => {
         // Check user role and load members list for admin/trainer
         try {
           const profile = await userService.getCurrentUserProfile();
-          console.debug('WorkoutList: profile', profile);
           if (profile && (profile.roles?.includes('ADMIN') || profile.roles?.includes('TRAINER'))) {
             setIsAdminOrTrainer(true);
-            const membersResp = await userService.getAllMembers();
-            console.debug('WorkoutList: membersResp', membersResp);
-            if (membersResp) setMembers(membersResp);
+            // Fetch all pages of members so dropdown is complete
+            const allMembers = await userService.getAllMembersPages();
+            if (allMembers) setMembers(allMembers);
           }
         } catch (e: any) {
           console.error('WorkoutList: failed to load profile or members', e?.message || e);
@@ -110,15 +114,15 @@ export const WorkoutList = () => {
         // Determine requested member id from selected filter or url
         const queryParams = new URLSearchParams(location.search);
         const requestedMemberId = queryParams.get('memberId') || (selectedMemberFilter && selectedMemberFilter !== 'all' ? selectedMemberFilter : undefined);
-        let workoutsResponse;
+        let allWorkouts: Workout[] = [];
         try {
-          workoutsResponse = await workoutApi.getAll(requestedMemberId || undefined);
-          console.debug('WorkoutList: workoutsResponse', workoutsResponse);
+          const resp = await workoutApi.getAll(requestedMemberId || undefined, 0, PAGE_SIZE);
+          allWorkouts = resp?.data || [];
+          setCurrentPage(0);
+          setHasMore(allWorkouts.length === PAGE_SIZE);
         } catch (wx) {
           console.error('WorkoutList: workouts API error', wx);
-          workoutsResponse = { data: [] };
         }
-        const allWorkouts = workoutsResponse?.data || [];
 
         // Respect role-based visibility:
         // - ADMIN: see all workouts
@@ -179,6 +183,27 @@ export const WorkoutList = () => {
     };
     fetchData();
   }, [toast, selectedMemberFilter, location.search]);
+
+  const handleLoadMore = async () => {
+    if (loadingMore || !hasMore) return;
+    setLoadingMore(true);
+    try {
+      const queryParams = new URLSearchParams(location.search);
+      const requestedMemberId = queryParams.get('memberId') || (selectedMemberFilter !== 'all' ? selectedMemberFilter : undefined);
+      const nextPage = currentPage + 1;
+      const resp = await workoutApi.getAll(requestedMemberId || undefined, nextPage, PAGE_SIZE);
+      const batch: Workout[] = resp?.data || [];
+      setWorkouts(prev => [...prev, ...batch].sort((a, b) =>
+        new Date(b.scheduledDate).getTime() - new Date(a.scheduledDate).getTime()
+      ));
+      setCurrentPage(nextPage);
+      setHasMore(batch.length === PAGE_SIZE);
+    } catch {
+      toast({ title: 'Error', description: 'Failed to load more workouts.', variant: 'destructive' });
+    } finally {
+      setLoadingMore(false);
+    }
+  };
 
   // Filter workouts based on search and date range
   useEffect(() => {
@@ -510,15 +535,25 @@ export const WorkoutList = () => {
       {filteredWorkouts.length > 0 ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {filteredWorkouts.map((workout) => {
-            const completedSets = workout.sets.filter(s => s.completed).length;
-            const totalSets = workout.sets.length;
-            const progressPct = totalSets > 0 ? Math.round((completedSets / totalSets) * 100) : 0;
+            // Group sets by exercise to count unique exercises
+            const exerciseMap = new Map<string, { total: number; completed: number }>();
+            workout.sets.forEach((s: any) => {
+              const exId = s.exercise?.id ?? s.exerciseId ?? 'unknown';
+              const entry = exerciseMap.get(exId) ?? { total: 0, completed: 0 };
+              entry.total += 1;
+              if (s.completed) entry.completed += 1;
+              exerciseMap.set(exId, entry);
+            });
+            const totalExercises = exerciseMap.size;
+            const completedExercises = [...exerciseMap.values()].filter(e => e.completed === e.total && e.total > 0).length;
+            const progressPct = totalExercises > 0 ? Math.round((completedExercises / totalExercises) * 100) : 0;
             return (
               <Card
                 key={workout.id}
                 className="glass-card p-4 hover:translate-y-[-2px] transition-all flex flex-col cursor-pointer"
                 onClick={() => navigate(`/dashboard/workouts/${workout.id}`)}
               >
+
                 {/* Name + completed badge */}
                 <div className="flex items-start justify-between gap-2 mb-1">
                   <h3 className="font-semibold text-white leading-tight flex-1 min-w-0 truncate">{workout.name}</h3>
@@ -538,7 +573,7 @@ export const WorkoutList = () => {
                 {/* Progress */}
                 <div className="mb-3">
                   <div className="flex items-center justify-between text-xs text-gray-400 mb-1">
-                    <span>{completedSets} / {totalSets} sets</span>
+                    <span>{completedExercises} / {totalExercises} exercise{totalExercises !== 1 ? 's' : ''}</span>
                     <span className="font-medium text-white">{progressPct}%</span>
                   </div>
                   <div className="h-1.5 bg-white/10 rounded-full overflow-hidden">
@@ -568,7 +603,24 @@ export const WorkoutList = () => {
             );
           })}
         </div>
-      ) : (
+      ) : null}
+
+      {/* Load More */}
+      {hasMore && !searchTerm && !dateRange.from && !dateRange.to && (
+        <div className="flex justify-center mt-4">
+          <Button
+            variant="outline"
+            className="border-white/20 text-white hover:bg-white/10 px-8"
+            onClick={handleLoadMore}
+            disabled={loadingMore}
+          >
+            {loadingMore ? <><Loader2 className="h-4 w-4 animate-spin mr-2" />Loading...</> : 'Load More'}
+          </Button>
+        </div>
+      )}
+
+      {/* Empty state */}
+      {filteredWorkouts.length === 0 && !loading && (
         <div className="text-center p-6">
           <div className="bg-lb-darker rounded-full p-4 inline-flex mb-4">
             <Search className="h-10 w-10 text-gray-400" />

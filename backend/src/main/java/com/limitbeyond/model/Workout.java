@@ -1,6 +1,9 @@
 package com.limitbeyond.model;
 
 import org.springframework.data.annotation.Id;
+import org.springframework.data.mongodb.core.index.CompoundIndex;
+import org.springframework.data.mongodb.core.index.CompoundIndexes;
+import org.springframework.data.mongodb.core.index.Indexed;
 import org.springframework.data.mongodb.core.mapping.DBRef;
 import org.springframework.data.mongodb.core.mapping.Document;
 import java.time.LocalDateTime;
@@ -8,6 +11,10 @@ import java.util.ArrayList;
 import java.util.List;
 
 @Document(collection = "workouts")
+@CompoundIndexes({
+    @CompoundIndex(name = "member_scheduled_idx", def = "{'member.$id': 1, 'scheduledDate': -1}"),
+    @CompoundIndex(name = "member_completed_idx", def = "{'member.$id': 1, 'completed': 1}")
+})
 public class Workout {
     @Id
     private String id;
@@ -28,7 +35,9 @@ public class Workout {
     @DBRef
     private List<MuscleGroup> targetMuscleGroups = new ArrayList<>();
 
+    @Indexed
     private LocalDateTime scheduledDate; // When the workout is scheduled for
+    @Indexed
     private LocalDateTime completedDate; // When the workout was completed
     private boolean completed;
     private String notes; // Optional notes about the workout

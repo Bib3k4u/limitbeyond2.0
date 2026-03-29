@@ -29,15 +29,10 @@ public class PaymentServiceImpl implements PaymentService {
 
     @Override
     public double getRevenueBetween(LocalDateTime start, LocalDateTime end) {
-        double sum = 0.0;
-        for (Payment p : paymentRepository.findAll()) {
-            if (p.getPaidAt() == null)
-                continue;
-            if ((p.getPaidAt().isEqual(start) || p.getPaidAt().isAfter(start))
-                    && (p.getPaidAt().isEqual(end) || p.getPaidAt().isBefore(end))) {
-                sum += p.getAmount();
-            }
-        }
-        return sum;
+        // Use DB-level date range query instead of loading all records into memory
+        return paymentRepository.findByPaidAtBetween(start, end)
+                .stream()
+                .mapToDouble(Payment::getAmount)
+                .sum();
     }
 }

@@ -84,7 +84,7 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({ userProfile }) =>
               const currResp = await workoutApi.getByDateRange(startCurrent, endCurrent);
               // Note: backend getByDateRange filters by current user; for admin we need member-specific calls
               // Instead call workoutApi.getAll with memberId and then filter by date client-side
-              const allResp = await workoutApi.getAll(m.id);
+              const allResp = await workoutApi.getAll(m.id, 0, 500);
               const memberWorkouts = allResp?.data || [];
               // filter
               const current = memberWorkouts.filter((w: any) => {
@@ -121,7 +121,7 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({ userProfile }) =>
           let countWorkouts = 0;
           await Promise.all((assigned || []).map(async (mid: string) => {
             try {
-              const resp = await workoutApi.getAll(mid);
+              const resp = await workoutApi.getAll(mid, 0, 500);
               const memberWorkouts = resp?.data || [];
               const current = memberWorkouts.filter((w: any) => {
                 const d = new Date(w.scheduledDate);
@@ -148,7 +148,7 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({ userProfile }) =>
         // MEMBER: use their own workouts
         else {
           try {
-            const resp = await workoutApi.getAll();
+            const resp = await workoutApi.getAll(undefined, 0, 500);
             const myWorkouts = resp?.data || [];
             setWorkoutsCount(myWorkouts.length);
             const current = myWorkouts.filter((w: any) => {

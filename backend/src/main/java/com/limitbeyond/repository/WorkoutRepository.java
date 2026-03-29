@@ -3,6 +3,8 @@ package com.limitbeyond.repository;
 import com.limitbeyond.model.MuscleGroup;
 import com.limitbeyond.model.User;
 import com.limitbeyond.model.Workout;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.mongodb.repository.MongoRepository;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -10,6 +12,9 @@ import java.util.List;
 public interface WorkoutRepository extends MongoRepository<Workout, String> {
     // Find workouts by member
     List<Workout> findByMember(User member);
+
+    // Find workouts by member with pagination
+    Page<Workout> findByMember(User member, Pageable pageable);
 
     // Find workouts by trainer
     List<Workout> findByTrainer(User trainer);

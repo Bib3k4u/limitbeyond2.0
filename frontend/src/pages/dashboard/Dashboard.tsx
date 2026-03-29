@@ -445,7 +445,7 @@ const DashboardHome = ({ userProfile, onProfileUpdate }: { userProfile: UserProf
     const fetchData = async () => {
       setDataLoading(true);
       const [workoutsRes, feedbacksRes, chatsRes, checkinsRes] = await Promise.allSettled([
-        workoutApi.getAll(userProfile.id),
+        workoutApi.getAll(userProfile.id, 0, 500),
         feedbackService.getMemberFeedback(userProfile.id),
         dietChatService.getMemberDietChats(userProfile.id),
         checkinApi.recent(30, userProfile.id),

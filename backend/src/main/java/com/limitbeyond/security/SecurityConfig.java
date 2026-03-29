@@ -20,6 +20,26 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
 import java.util.Arrays;
 
+/**
+ * Security configuration for the LimitBeyond application.
+ *
+ * RATE LIMITING NOTE:
+ * To add rate limiting, consider one of the following approaches:
+ * 1. Bucket4j (recommended): Add bucket4j-spring-boot-starter dependency and configure
+ *    rate limits per endpoint or per IP using @RateLimiting annotations or a servlet filter.
+ *    Example dependency: io.github.bucket4j:bucket4j-core
+ * 2. Spring Cloud Gateway: If behind a gateway, configure rate limiting there.
+ * 3. Custom OncePerRequestFilter: Maintain an in-memory ConcurrentHashMap<String, AtomicInteger>
+ *    keyed by IP address, decrement via a scheduled task every minute.
+ *
+ * Suggested limits:
+ *   - /api/auth/**:  10 requests/minute per IP  (brute-force protection)
+ *   - /api/ai-workout/**: 20 requests/minute per user (Mistral API cost control)
+ *   - All other endpoints: 100 requests/minute per user
+ *
+ * Session management is already STATELESS (JWT-based), which saves server memory
+ * compared to session-based authentication.
+ */
 @Configuration
 @EnableWebSecurity
 @EnableMethodSecurity

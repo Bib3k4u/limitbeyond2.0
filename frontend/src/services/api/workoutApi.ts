@@ -3,15 +3,29 @@ import { Workout, WorkoutRequest } from '@/types/workout';
 import cache from '@/services/cache';
 
 export const workoutApi = {
-  getAll: async (memberId?: string) => {
-    const key = memberId ? `workouts:member:${memberId}` : `workouts:all`;
+  getAll: async (memberId?: string, page: number = 0, size: number = 50) => {
+    const key = memberId ? `workouts:member:${memberId}:p${page}:s${size}` : `workouts:all:p${page}:s${size}`;
     const cached = cache.get(key);
     if (cached) return { data: cached } as any;
-    // If memberId provided, pass as query param so backend can return that member's workouts
-    const config = memberId ? { params: { memberId } } : undefined;
-    const resp = await axiosInstance.get<Workout[]>('/workouts', config);
+    const params: Record<string, any> = { page, size };
+    if (memberId) params.memberId = memberId;
+    const resp = await axiosInstance.get<Workout[]>('/workouts', { params });
     cache.set(key, resp.data, 2 * 60 * 1000); // cache 2 minutes
     return resp;
+  },
+
+  // Fetch all pages sequentially — use for history/stats where completeness matters
+  getAllPages: async (memberId?: string, pageSize: number = 100): Promise<Workout[]> => {
+    const allWorkouts: Workout[] = [];
+    let page = 0;
+    while (true) {
+      const resp = await workoutApi.getAll(memberId, page, pageSize);
+      const batch: Workout[] = resp?.data || [];
+      allWorkouts.push(...batch);
+      if (batch.length < pageSize) break; // last page reached
+      page++;
+    }
+    return allWorkouts;
   },
 
   getById: async (id: string) => {

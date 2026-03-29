@@ -20,6 +20,10 @@ const AuthForm: React.FC<AuthFormProps> = ({ type }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // `loginIdentifier` is used only for the sign-in field (username / email / phone).
+  // `formData` drives the sign-up form which always uses the proper `username` field.
+  const [loginIdentifier, setLoginIdentifier] = useState('');
+
   const [formData, setFormData] = useState<SignupData>({
     username: '',
     email: '',
@@ -53,12 +57,12 @@ const AuthForm: React.FC<AuthFormProps> = ({ type }) => {
     try {
       if (type === 'signin') {
         const signinData: SigninData = {
-          username: formData.username,
+          identifier: loginIdentifier.trim(),
           password: formData.password
         };
-        
+
         try {
-          console.log("Attempting to sign in with:", signinData.username);
+          console.log("Attempting to sign in with:", signinData.identifier);
           const response = await authService.signin(signinData);
           console.log("Sign in response:", response);
           
@@ -118,8 +122,8 @@ const AuthForm: React.FC<AuthFormProps> = ({ type }) => {
           {type === 'signin' ? 'Sign In' : 'Create an Account'}
         </CardTitle>
         <CardDescription className="text-center text-gray-200">
-          {type === 'signin' 
-            ? 'Enter your credentials to access your account' 
+          {type === 'signin'
+            ? 'Sign in with your username, email, or phone number'
             : 'Fill in the form below to create your account'}
         </CardDescription>
       </CardHeader>
@@ -131,19 +135,35 @@ const AuthForm: React.FC<AuthFormProps> = ({ type }) => {
           </Alert>
         )}
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="username">Username</Label>
-            <Input
-              id="username"
-              name="username"
-              placeholder="username"
-              required
-              value={formData.username}
-              onChange={handleChange}
-              className="bg-lb-darker"
-            />
-          </div>
-          
+          {type === 'signin' ? (
+            <div className="space-y-2">
+              <Label htmlFor="loginIdentifier">Username / Email / Phone</Label>
+              <Input
+                id="loginIdentifier"
+                name="loginIdentifier"
+                placeholder="username, email or phone"
+                required
+                autoComplete="username"
+                value={loginIdentifier}
+                onChange={(e) => setLoginIdentifier(e.target.value)}
+                className="bg-lb-darker"
+              />
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <Label htmlFor="username">Username</Label>
+              <Input
+                id="username"
+                name="username"
+                placeholder="username"
+                required
+                value={formData.username}
+                onChange={handleChange}
+                className="bg-lb-darker"
+              />
+            </div>
+          )}
+
           {type === 'signup' && (
             <>
               <div className="space-y-2">

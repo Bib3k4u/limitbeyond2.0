@@ -1,18 +1,26 @@
 package com.limitbeyond.model;
 
 import org.springframework.data.annotation.Id;
+import org.springframework.data.mongodb.core.index.CompoundIndex;
+import org.springframework.data.mongodb.core.index.CompoundIndexes;
+import org.springframework.data.mongodb.core.index.Indexed;
 import org.springframework.data.mongodb.core.mapping.Document;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
 @Document(collection = "feedback")
+@CompoundIndexes({
+    @CompoundIndex(name = "memberId_createdAt_idx", def = "{'memberId': 1, 'createdAt': -1}")
+})
 public class Feedback {
     @Id
     private String id;
+    @Indexed
     private String memberId;
     private String title;
     private String content;
+    @Indexed
     private LocalDateTime createdAt;
     private List<FeedbackResponse> responses = new ArrayList<>();
 

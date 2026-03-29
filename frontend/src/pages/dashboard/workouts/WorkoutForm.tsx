@@ -94,6 +94,66 @@ const WorkoutForm = () => {
   const [openHistoryIndex, setOpenHistoryIndex] = useState<number | null>(null);
   const [loadingSuggestions, setLoadingSuggestions] = useState<Record<string, boolean>>({});
 
+  /**
+   * Classify an exercise by name to get its natural rep-range targets,
+   * recommended weight increment, and maximum sensible set count.
+   */
+  const getExerciseConfig = (name: string) => {
+    const n = name.toLowerCase();
+    //                                       repMin  repMax  increment  maxSets  starterWeight  label
+    // Heavy powerlifting compounds
+    if (/dead\s*lift/.test(n))
+      return { repMin: 3,  repMax: 6,  increment: 5,   maxSets: 5, starterWeight: 60,  label: 'powerlifting' };
+    if (/back squat|barbell squat|front squat/.test(n))
+      return { repMin: 3,  repMax: 6,  increment: 2.5, maxSets: 5, starterWeight: 40,  label: 'powerlifting' };
+    // Strength presses (barbell)
+    if (/bench press/.test(n))
+      return { repMin: 4,  repMax: 8,  increment: 2.5, maxSets: 5, starterWeight: 40,  label: 'strength press' };
+    if (/overhead press|military press|barbell press/.test(n))
+      return { repMin: 4,  repMax: 8,  increment: 2.5, maxSets: 5, starterWeight: 30,  label: 'strength press' };
+    // Barbell rows & heavy pulls
+    if (/barbell.*row|bent.over.*row|pendlay|t.bar/.test(n))
+      return { repMin: 5,  repMax: 10, increment: 2.5, maxSets: 4, starterWeight: 40,  label: 'strength pull' };
+    // Leg compound machines
+    if (/leg press|hack squat/.test(n))
+      return { repMin: 8,  repMax: 15, increment: 10,  maxSets: 5, starterWeight: 60,  label: 'compound legs' };
+    // Leg compound free weight
+    if (/hip thrust|goblet|bulgarian|sumo squat/.test(n))
+      return { repMin: 8,  repMax: 15, increment: 5,   maxSets: 4, starterWeight: 20,  label: 'compound legs' };
+    // General squat / lunge patterns
+    if (/squat|lunge|step.up/.test(n))
+      return { repMin: 8,  repMax: 12, increment: 5,   maxSets: 5, starterWeight: 20,  label: 'compound legs' };
+    // Upper-body pull (cables, machines, bodyweight)
+    if (/lat pull|cable row|seated.*row/.test(n))
+      return { repMin: 6,  repMax: 12, increment: 5,   maxSets: 4, starterWeight: 30,  label: 'upper pull' };
+    if (/pull.up|chin.up|inverted row/.test(n))
+      return { repMin: 6,  repMax: 12, increment: 2.5, maxSets: 4, starterWeight: 0,   label: 'upper pull bw' };
+    // Dips & push press
+    if (/dip|push press/.test(n))
+      return { repMin: 6,  repMax: 12, increment: 2.5, maxSets: 4, starterWeight: 0,   label: 'upper push' };
+    // Shoulder isolation
+    if (/lateral raise|front raise|rear delt|face pull|upright row/.test(n))
+      return { repMin: 12, repMax: 20, increment: 2.5, maxSets: 4, starterWeight: 5,   label: 'shoulder iso' };
+    // Arm isolation — barbell curls need a bit more weight
+    if (/barbell curl|ez.bar curl|ez bar curl/.test(n))
+      return { repMin: 10, repMax: 15, increment: 2.5, maxSets: 4, starterWeight: 20,  label: 'arm iso' };
+    if (/curl|pushdown|extension|kickback|skull|tricep/.test(n))
+      return { repMin: 10, repMax: 15, increment: 2.5, maxSets: 4, starterWeight: 10,  label: 'arm iso' };
+    // Chest isolation
+    if (/fly|pec deck|cable cross|chest cross/.test(n))
+      return { repMin: 10, repMax: 15, increment: 2.5, maxSets: 4, starterWeight: 10,  label: 'chest iso' };
+    // Calf / small muscle isolation
+    if (/calf raise/.test(n))
+      return { repMin: 12, repMax: 20, increment: 5,   maxSets: 4, starterWeight: 20,  label: 'small iso' };
+    if (/shrug|wrist/.test(n))
+      return { repMin: 12, repMax: 20, increment: 2.5, maxSets: 4, starterWeight: 20,  label: 'small iso' };
+    // Core & bodyweight (no external load progression)
+    if (/push.up|plank|crunch|sit.up|leg raise|mountain|burpee|v.up|hollow|flutter|toes.to|dragon/.test(n))
+      return { repMin: 12, repMax: 25, increment: 0,   maxSets: 4, starterWeight: 0,   label: 'bodyweight' };
+    // Default — moderate compound
+    return { repMin: 8,  repMax: 12, increment: 2.5, maxSets: 4, starterWeight: 20,  label: 'general' };
+  };
+
   const handleAISuggestions = async (exerciseIndex: number) => {
     const exercise = selectedExercises[exerciseIndex];
     if (!exercise?.exerciseId) return;
@@ -101,63 +161,147 @@ const WorkoutForm = () => {
 
     setLoadingSuggestions(prev => ({ ...prev, [exerciseId]: true }));
     try {
-      // Pull last 10 sessions for this exercise from already-fetched history
+      // ── Pull last 10 sessions for this exercise from already-fetched history ──
       const sessions: Array<Array<{ reps: number; weight: number; completed?: boolean }>> = allWorkoutsHistory
-        .map(w => (w.sets || []).filter((s: any) => s.exercise?.id === exerciseId && s.weight > 0 && s.reps > 0)
-          .map((s: any) => ({ reps: s.reps, weight: s.weight, completed: s.completed })))
+        .map(w => (w.sets || [])
+          .filter((s: any) => s.exercise?.id === exerciseId && s.reps > 0)
+          .map((s: any) => ({ reps: s.reps, weight: s.weight ?? 0, completed: s.completed })))
         .filter(s => s.length > 0)
         .slice(-10);
 
       let suggestedSets: Array<{ reps: number; weight: number }>;
+      let toastTitle: string;
       let toastDesc: string;
 
+      // Snap to nearest 2.5 kg — the universal gym plate / dumbbell increment
+      const snap = (v: number) => Math.round(v / 2.5) * 2.5;
+      const fmt  = (v: number) => snap(v).toFixed(1);
+
       if (sessions.length > 0) {
-        const lastSets = sessions[sessions.length - 1];
-        // Progressive overload: increase weight if last session was completed or consistent
-        // Check if all sets were at/above a good rep count
-        const avgReps = lastSets.reduce((a, s) => a + s.reps, 0) / lastSets.length;
-        const allCompleted = lastSets.every(s => s.completed !== false);
-        const shouldProgress = allCompleted && avgReps >= 6;
+        const cfg = getExerciseConfig(exercise.exerciseName);
+        const lastSets  = sessions[sessions.length - 1];
+        const prevSets  = sessions.length >= 2 ? sessions[sessions.length - 2] : null;
 
-        // Check last 3 sessions to see if weight has been stuck
-        const recentWeights = sessions.slice(-3).map(sess =>
-          sess.reduce((max, s) => Math.max(max, s.weight), 0)
+        // ── Last session stats ─────────────────────────────────────────────────
+        const numSets        = lastSets.length;
+        const avgReps        = lastSets.reduce((a, s) => a + s.reps, 0) / numSets;
+        const avgWeight      = lastSets.reduce((a, s) => a + s.weight, 0) / numSets;
+        const completedCount = lastSets.filter(s => s.completed !== false).length;
+        const completionRate = completedCount / numSets;   // 0–1
+        const allCompleted   = completionRate === 1;
+
+        // ── User's personal baseline from last 3 sessions ──────────────────────
+        // We use this instead of our hardcoded repMax so we NEVER drop reps from
+        // what the user is already doing (e.g. they do 10 reps at bench — we keep 10).
+        const recentN       = sessions.slice(-3);
+        const baselineReps  = Math.round(
+          recentN.reduce((sum, sess) => sum + sess.reduce((a, s) => a + s.reps, 0) / sess.length, 0)
+          / recentN.length
         );
-        const weightIsStuck = recentWeights.length >= 2 && recentWeights.every(w => w === recentWeights[0]);
 
-        const increment = weightIsStuck || shouldProgress ? 2.5 : 0;
+        // Previous session — for rep-plateau detection
+        const prevAvgReps = prevSets
+          ? prevSets.reduce((a, s) => a + s.reps, 0) / prevSets.length : -1;
+        const prevAllDone = prevSets ? prevSets.every(s => s.completed !== false) : false;
+        // "stuck" = completed both sessions at the same rep count (±1)
+        const repsStuck   = prevSets !== null
+          && Math.abs(Math.round(avgReps) - Math.round(prevAvgReps)) <= 1
+          && allCompleted && prevAllDone;
 
-        suggestedSets = lastSets.map(s => ({
-          reps: s.reps,
-          weight: Math.round((s.weight + increment) * 2) / 2, // round to nearest 0.5kg
+        // ── Decision engine ────────────────────────────────────────────────────
+        type Action = 'weight' | 'reps' | 'sets' | 'consolidate';
+        let action: Action;
+        let newReps    = Math.round(avgReps);   // default: keep what they did
+        let newWeight  = snap(avgWeight);
+        let newNumSets = numSets;
+
+        if (completionRate < 0.7) {
+          // Struggling — don't progress until they can finish their sets
+          action = 'consolidate';
+
+        } else if (allCompleted && Math.round(avgReps) >= baselineReps) {
+          // Completing at / above their personal rep baseline → increase weight.
+          // KEEP the same rep count — never reset reps down.
+          if (cfg.increment > 0) {
+            action    = 'weight';
+            newWeight = snap(avgWeight + cfg.increment);
+            newReps   = Math.round(avgReps);   // preserve the rep count they're used to
+          } else {
+            // Bodyweight: can't add load → add a set, or add reps if at max sets
+            if (numSets < cfg.maxSets) {
+              action     = 'sets';
+              newNumSets = numSets + 1;
+            } else {
+              action  = 'reps';
+              newReps = Math.round(avgReps) + 2;
+            }
+          }
+
+        } else if (repsStuck && numSets < cfg.maxSets) {
+          // Same reps two sessions in a row despite completing everything → add a set
+          action     = 'sets';
+          newNumSets = numSets + 1;
+
+        } else if (allCompleted) {
+          // Completed but below their baseline rep count → build reps back up
+          action  = 'reps';
+          newReps = Math.min(Math.round(avgReps) + 1, baselineReps);
+
+        } else {
+          // Not finishing sets — consolidate first
+          action = 'consolidate';
+        }
+
+        // ── Build suggested sets ───────────────────────────────────────────────
+        suggestedSets = Array.from({ length: newNumSets }, () => ({
+          reps: newReps,
+          weight: newWeight,
         }));
 
-        const analysed = sessions.length;
-        toastDesc = increment > 0
-          ? `Analysed ${analysed} session${analysed > 1 ? 's' : ''} — progressed weight by +${increment}kg ↑`
-          : `Analysed ${analysed} session${analysed > 1 ? 's' : ''} — consolidating at current weight`;
+        const analysed   = sessions.length;
+        const sessionStr = `Analysed ${analysed} session${analysed > 1 ? 's' : ''}`;
+
+        if (action === 'weight') {
+          toastTitle = `↑ Weight increase — ${exercise.exerciseName}`;
+          toastDesc  = `${sessionStr} · Completed ${Math.round(avgReps)} reps — ` +
+                       `adding ${cfg.increment}kg: ${fmt(avgWeight)}kg → ${fmt(newWeight)}kg @ ${newReps} reps`;
+        } else if (action === 'reps') {
+          toastTitle = `↑ More reps — ${exercise.exerciseName}`;
+          toastDesc  = `${sessionStr} · Add 1 rep per set: ${Math.round(avgReps)} → ${newReps} reps ` +
+                       `at ${fmt(newWeight)}kg`;
+        } else if (action === 'sets') {
+          toastTitle = `↑ Extra set — ${exercise.exerciseName}`;
+          toastDesc  = `${sessionStr} · Consistent — adding 1 set: ` +
+                       `${numSets} → ${newNumSets} sets × ${newReps} reps @ ${fmt(newWeight)}kg`;
+        } else {
+          toastTitle = `= Keep pushing — ${exercise.exerciseName}`;
+          toastDesc  = `${sessionStr} · Complete all ${numSets} sets at ${Math.round(avgReps)} reps × ` +
+                       `${fmt(avgWeight)}kg before progressing`;
+        }
+
       } else {
-        // No history at all — try backend, then fall back gracefully
+        // ── No history — try backend AI, then apply sensible defaults ──────────
         try {
           const resp = await aiWorkoutApi.getProgressiveOverload(exerciseId);
           const backendSets = resp?.data?.sets;
           if (Array.isArray(backendSets) && backendSets.length > 0) {
             suggestedSets = backendSets.map((s: any) => ({ reps: s.reps || 10, weight: s.weight || 20 }));
-            toastDesc = 'AI-generated starter plan applied';
+            toastTitle = `✓ Starter plan — ${exercise.exerciseName}`;
+            toastDesc  = 'AI-generated starter plan applied — adjust weights as needed.';
           } else {
             throw new Error('empty');
           }
         } catch {
-          suggestedSets = [
-            { reps: 10, weight: 20 },
-            { reps: 10, weight: 20 },
-            { reps: 10, weight: 20 },
-          ];
-          toastDesc = 'No history found — starter weights applied. Adjust as needed.';
+          const cfg = getExerciseConfig(exercise.exerciseName);
+          const starterReps   = Math.round((cfg.repMin + cfg.repMax) / 2);
+          const starterWeight = cfg.starterWeight;
+          suggestedSets = Array.from({ length: 3 }, () => ({ reps: starterReps, weight: starterWeight }));
+          toastTitle = `✓ Starter plan — ${exercise.exerciseName}`;
+          toastDesc  = `No history found — 3 × ${starterReps} reps @ ${starterWeight > 0 ? starterWeight + 'kg' : 'bodyweight'} applied. Adjust to your level.`;
         }
       }
 
-      // Apply immediately — replace all sets on this exercise
+      // ── Apply to form ──────────────────────────────────────────────────────
       const updatedExercises = [...selectedExercises];
       updatedExercises[exerciseIndex] = {
         ...exercise,
@@ -170,7 +314,7 @@ const WorkoutForm = () => {
       };
       setSelectedExercises(updatedExercises);
 
-      toast({ title: `✓ ${exercise.exerciseName} — progressive overload applied`, description: toastDesc });
+      toast({ title: toastTitle, description: toastDesc });
     } catch (err) {
       toast({ title: 'Error', description: 'Could not compute suggestions.', variant: 'destructive' });
     } finally {
@@ -268,13 +412,10 @@ const WorkoutForm = () => {
         if (userProfile) {
           setCurrentUser(userProfile);
           
-          // Load members if user is trainer/admin
+          // Load all members across all pages for the dropdown
           if (userProfile.roles.includes('TRAINER') || userProfile.roles.includes('ADMIN')) {
-            const membersResponse = await userService.getAllMembers();
-            // userService.getAllMembers() returns the data array directly (not an axios response object)
-            if (membersResponse) {
-              setMembers(membersResponse);
-            }
+            const allMembers = await userService.getAllMembersPages();
+            if (allMembers) setMembers(allMembers);
           }
         }
 
@@ -429,8 +570,8 @@ const WorkoutForm = () => {
           return;
         }
 
-        const resp = await workoutApi.getAll(memberToQuery);
-        const workouts = resp?.data || [];
+        // Fetch ALL workout history pages so AI progressive overload has complete data
+        const workouts = await workoutApi.getAllPages(memberToQuery, 100);
 
         // Store sorted ascending for history charts
         const ascSorted = [...workouts].sort((a: any, b: any) =>
@@ -668,10 +809,10 @@ const WorkoutForm = () => {
                 <FormItem>
                   <FormLabel className="text-white">Date *</FormLabel>
                   <FormControl>
-                    <Input 
-                      type="date" 
-                      {...field} 
-                      className="bg-lb-dark border-white/20 text-white"
+                    <Input
+                      type="date"
+                      {...field}
+                      className="bg-lb-dark border-white/20 text-white [color-scheme:dark]"
                     />
                   </FormControl>
                   <FormMessage />
@@ -924,30 +1065,42 @@ const WorkoutForm = () => {
                                 const gradId = `area-grad-${exercise.exerciseId.replace(/[^a-z0-9]/gi, '')}`;
                                 return (
                                   <div>
-                                    <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: 60 }} preserveAspectRatio="none">
-                                      <defs>
-                                        <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
-                                          <stop offset="0%" stopColor="rgb(249,115,22)" stopOpacity="0.35" />
-                                          <stop offset="100%" stopColor="rgb(249,115,22)" stopOpacity="0.02" />
-                                        </linearGradient>
-                                      </defs>
-                                      {/* Area fill */}
-                                      <path d={areaD} fill={`url(#${gradId})`} />
-                                      {/* Line */}
-                                      <path d={lineD} fill="none" stroke="rgb(249,115,22)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                                      {/* Data points */}
-                                      {coords.map((p, i) => (
-                                        <circle
-                                          key={i}
-                                          cx={p.x}
-                                          cy={p.y}
-                                          r={i === n - 1 ? 3.5 : 2.5}
-                                          fill={i === n - 1 ? 'rgb(249,115,22)' : 'rgba(249,115,22,0.55)'}
-                                          stroke={i === n - 1 ? 'rgba(249,115,22,0.4)' : 'none'}
-                                          strokeWidth={i === n - 1 ? 4 : 0}
-                                        />
-                                      ))}
-                                    </svg>
+                                    {/* Relative wrapper so HTML dots can overlay the SVG */}
+                                    <div className="relative w-full" style={{ height: 60 }}>
+                                      {/* Area + line only — preserveAspectRatio:none is safe for paths */}
+                                      <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-full" preserveAspectRatio="none">
+                                        <defs>
+                                          <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
+                                            <stop offset="0%" stopColor="rgb(249,115,22)" stopOpacity="0.35" />
+                                            <stop offset="100%" stopColor="rgb(249,115,22)" stopOpacity="0.02" />
+                                          </linearGradient>
+                                        </defs>
+                                        <path d={areaD} fill={`url(#${gradId})`} />
+                                        <path d={lineD} fill="none" stroke="rgb(249,115,22)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                                      </svg>
+                                      {/* Dots as HTML so they are always perfect circles regardless of SVG scale */}
+                                      {coords.map((p, i) => {
+                                        const isLast = i === n - 1;
+                                        const size = isLast ? 8 : 6;
+                                        return (
+                                          <span
+                                            key={i}
+                                            style={{
+                                              position: 'absolute',
+                                              left: `calc(${(p.x / W) * 100}% - ${size / 2}px)`,
+                                              top: `calc(${(p.y / H) * 100}% - ${size / 2}px)`,
+                                              width: size,
+                                              height: size,
+                                              borderRadius: '50%',
+                                              background: isLast ? 'rgb(249,115,22)' : 'rgba(249,115,22,0.6)',
+                                              boxShadow: isLast ? '0 0 0 3px rgba(249,115,22,0.25)' : 'none',
+                                              display: 'block',
+                                              flexShrink: 0,
+                                            }}
+                                          />
+                                        );
+                                      })}
+                                    </div>
                                     {/* X-axis labels */}
                                     <div className="flex mt-0.5">
                                       {labels.map((lbl, i) => (

@@ -1,6 +1,8 @@
 package com.limitbeyond.repository;
 
 import com.limitbeyond.model.Checkin;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.mongodb.repository.MongoRepository;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -12,4 +14,6 @@ public interface CheckinRepository extends MongoRepository<Checkin, String> {
 
     List<Checkin> findByUserIdAndOccurredAtBetweenOrderByOccurredAtDesc(String userId, LocalDateTime start,
             LocalDateTime end);
+
+    Page<Checkin> findByUserIdOrderByOccurredAtDesc(String userId, Pageable pageable);
 }

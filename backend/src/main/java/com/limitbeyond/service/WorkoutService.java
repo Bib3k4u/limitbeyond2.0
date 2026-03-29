@@ -3,6 +3,8 @@ package com.limitbeyond.service;
 import com.limitbeyond.dto.workout.WorkoutRequest;
 import com.limitbeyond.model.Workout;
 import com.limitbeyond.model.User;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -12,6 +14,8 @@ public interface WorkoutService {
     Workout findById(String id);
 
     List<Workout> findByMember(User member);
+
+    Page<Workout> findByMember(User member, Pageable pageable);
 
     List<Workout> findByTrainer(User trainer);
 

@@ -1,6 +1,7 @@
 package com.limitbeyond.model;
 
 import org.springframework.data.annotation.Id;
+import org.springframework.data.mongodb.core.index.Indexed;
 import org.springframework.data.mongodb.core.mapping.Document;
 import java.util.HashSet;
 import java.util.Set;
@@ -9,11 +10,14 @@ import java.util.Set;
 public class User {
     @Id
     private String id;
+    @Indexed(unique = true)
     private String username;
+    @Indexed(unique = true)
     private String email;
     private String password;
     private String firstName;
     private String lastName;
+    @Indexed
     private String phoneNumber;
     private Set<Role> roles = new HashSet<>();
     private boolean active = false;

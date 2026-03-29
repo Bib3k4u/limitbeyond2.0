@@ -113,7 +113,8 @@ export function WorkoutStatsChart() {
     const fetchStats = async () => {
       setLoading(true);
       try {
-        const response = await workoutApi.getAll();
+        // Fetch up to 500 workouts for accurate chart data
+        const response = await workoutApi.getAll(undefined, 0, 500);
         let workouts: any[] = response?.data || [];
 
         // Filter by muscle group client-side

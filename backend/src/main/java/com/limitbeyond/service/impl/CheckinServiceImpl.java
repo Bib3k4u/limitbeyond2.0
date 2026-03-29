@@ -25,9 +25,9 @@ public class CheckinServiceImpl implements CheckinService {
 
     @Override
     public List<Checkin> getRecentCheckins(int limit) {
-        // Simple implementation: return all ordered and let caller limit
-        return checkinRepository.findByOccurredAtBetweenOrderByOccurredAtDesc(LocalDateTime.now().minusYears(10),
-                LocalDateTime.now());
+        // Use a proper 30-day window at DB level to avoid fetching all records
+        LocalDateTime thirtyDaysAgo = LocalDateTime.now().minusDays(30);
+        return checkinRepository.findByOccurredAtBetweenOrderByOccurredAtDesc(thirtyDaysAgo, LocalDateTime.now());
     }
 
     @Override

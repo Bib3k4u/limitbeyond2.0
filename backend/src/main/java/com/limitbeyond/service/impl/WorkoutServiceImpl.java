@@ -13,6 +13,8 @@ import com.limitbeyond.repository.ExerciseTemplateRepository;
 import com.limitbeyond.service.WorkoutService;
 import com.limitbeyond.service.MuscleGroupService;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.stereotype.Service;
 import org.slf4j.Logger;
@@ -83,8 +85,9 @@ public class WorkoutServiceImpl implements WorkoutService {
             workout.setTargetMuscleGroups(groups);
         }
 
-        // Create and add sets
+        // Create and add sets - collect all first, then bulk save
         if (request.getSets() != null) {
+            List<WorkoutSet> newSets = new ArrayList<>();
             for (WorkoutRequest.WorkoutSetRequest setRequest : request.getSets()) {
                 ExerciseTemplate exercise = exerciseTemplateRepository.findById(setRequest.getExerciseId())
                         .orElseThrow(() -> new RuntimeException("Exercise not found"));
@@ -94,9 +97,10 @@ public class WorkoutServiceImpl implements WorkoutService {
                 set.setNotes(setRequest.getNotes());
                 Double w = setRequest.getWeight() != null ? setRequest.getWeight() : 0.0;
                 set.setVolume(w * setRequest.getReps());
-                set = workoutSetRepository.save(set);
-                workout.addSet(set);
+                newSets.add(set);
             }
+            List<WorkoutSet> savedSets = workoutSetRepository.saveAll(newSets);
+            savedSets.forEach(workout::addSet);
         }
 
         return workoutRepository.save(workout);
@@ -119,6 +123,11 @@ public class WorkoutServiceImpl implements WorkoutService {
             logger.warn("Failed to log findByMember debug info", e);
         }
         return results;
+    }
+
+    @Override
+    public Page<Workout> findByMember(User member, Pageable pageable) {
+        return workoutRepository.findByMember(member, pageable);
     }
 
     @Override
@@ -186,7 +195,8 @@ public class WorkoutServiceImpl implements WorkoutService {
             workout.setSets(new ArrayList<>());
             workoutSetRepository.deleteAll(existingSets);
 
-            // Add new sets
+            // Add new sets - collect all then bulk save
+            List<WorkoutSet> newSets = new ArrayList<>();
             for (WorkoutRequest.WorkoutSetRequest setRequest : request.getSets()) {
                 ExerciseTemplate exercise = exerciseTemplateRepository.findById(setRequest.getExerciseId())
                         .orElseThrow(() -> new RuntimeException("Exercise not found"));
@@ -196,9 +206,10 @@ public class WorkoutServiceImpl implements WorkoutService {
                 set.setNotes(setRequest.getNotes());
                 Double w = setRequest.getWeight() != null ? setRequest.getWeight() : 0.0;
                 set.setVolume(w * setRequest.getReps());
-                set = workoutSetRepository.save(set);
-                workout.addSet(set);
+                newSets.add(set);
             }
+            List<WorkoutSet> savedSets = workoutSetRepository.saveAll(newSets);
+            savedSets.forEach(workout::addSet);
         }
 
         return workoutRepository.save(workout);
@@ -247,11 +258,10 @@ public class WorkoutServiceImpl implements WorkoutService {
     public Workout completeWorkout(String id) {
         Workout workout = findById(id);
 
-        // Mark all sets as completed
-        for (WorkoutSet set : workout.getSets()) {
-            set.setCompleted(true);
-            workoutSetRepository.save(set);
-        }
+        // Mark all sets as completed, then bulk save
+        List<WorkoutSet> sets = workout.getSets();
+        sets.forEach(set -> set.setCompleted(true));
+        workoutSetRepository.saveAll(sets);
 
         workout.setCompleted(true);
         return workoutRepository.save(workout);
@@ -269,15 +279,17 @@ public class WorkoutServiceImpl implements WorkoutService {
         copy.setNotes(original.getNotes());
         copy.setTargetMuscleGroups(original.getTargetMuscleGroups());
 
-        // Copy sets
+        // Copy sets - collect all then bulk save
+        List<WorkoutSet> copiedSets = new ArrayList<>();
         for (WorkoutSet originalSet : original.getSets()) {
             WorkoutSet newSet = new WorkoutSet(originalSet.getExercise(), originalSet.getReps());
             newSet.setWeight(originalSet.getWeight());
             newSet.setNotes(originalSet.getNotes());
             newSet.setVolume(originalSet.getVolume());
-            newSet = workoutSetRepository.save(newSet);
-            copy.addSet(newSet);
+            copiedSets.add(newSet);
         }
+        List<WorkoutSet> savedCopiedSets = workoutSetRepository.saveAll(copiedSets);
+        savedCopiedSets.forEach(copy::addSet);
 
         return workoutRepository.save(copy);
     }

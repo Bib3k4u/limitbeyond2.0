@@ -24,6 +24,10 @@ import java.util.ArrayList;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 
 @RestController
 @RequestMapping("/api/workouts")
@@ -52,7 +56,10 @@ public class WorkoutController {
 
     @GetMapping
     @PreAuthorize("isAuthenticated()")
-    public ResponseEntity<List<WorkoutResponse>> getMyWorkouts(@RequestParam(required = false) String memberId) {
+    public ResponseEntity<List<WorkoutResponse>> getMyWorkouts(
+            @RequestParam(required = false) String memberId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "50") int size) {
         User me = getCurrentUserOrThrow();
 
         User memberToQuery = me;
@@ -71,17 +78,17 @@ public class WorkoutController {
             }
         }
 
-        List<Workout> workouts = workoutService.findByMember(memberToQuery);
-        if (workouts == null) {
-            workouts = new ArrayList<>();
-        }
+        Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "scheduledDate"));
+        Page<Workout> workoutPage = workoutService.findByMember(memberToQuery, pageable);
+        List<Workout> workouts = workoutPage.getContent();
+
         // Debug logging to help trace memberId lookups and returned counts
         try {
             String callerId = me != null ? me.getId() : "unknown";
             String resolvedMemberId = memberToQuery != null ? memberToQuery.getId() : "null";
-            int found = workouts != null ? workouts.size() : 0;
-            logger.info("getMyWorkouts called by={} requestedMemberId={} resolvedMemberId={} returnedCount={}",
-                    callerId, memberId, resolvedMemberId, found);
+            int found = workouts.size();
+            logger.info("getMyWorkouts called by={} requestedMemberId={} resolvedMemberId={} returnedCount={} page={} size={}",
+                    callerId, memberId, resolvedMemberId, found, page, size);
         } catch (Exception e) {
             logger.warn("Failed to log getMyWorkouts debug info", e);
         }

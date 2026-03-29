@@ -4,6 +4,10 @@ import com.limitbeyond.model.Role;
 import com.limitbeyond.model.User;
 import com.limitbeyond.repository.UserRepository;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
@@ -71,24 +75,30 @@ public class UserController {
 
     @GetMapping("/trainers")
     @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<List<User>> getAllTrainers() {
-        List<User> trainers = userRepository.findByRolesContaining(Role.TRAINER);
-        return ResponseEntity.ok(trainers);
+    public ResponseEntity<List<User>> getAllTrainers(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "100") int size) {
+        Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.ASC, "username"));
+        Page<User> trainerPage = userRepository.findByRolesContaining(Role.TRAINER, pageable);
+        return ResponseEntity.ok(trainerPage.getContent());
     }
 
     @GetMapping("/members")
     @PreAuthorize("hasAnyRole('ADMIN', 'TRAINER')")
-    public ResponseEntity<List<User>> getAllMembers() {
+    public ResponseEntity<List<User>> getAllMembers(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "100") int size) {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         String username = authentication.getName();
         User currentUser = userRepository.findByUsername(username)
                 .orElseThrow(() -> new RuntimeException("User not found"));
 
+        Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.ASC, "username"));
         List<User> members;
         if (currentUser.getRoles().contains(Role.ADMIN)) {
-            members = userRepository.findByRolesContaining(Role.MEMBER);
+            members = userRepository.findByRolesContaining(Role.MEMBER, pageable).getContent();
         } else {
-            members = userRepository.findByRolesContainingAndActive(Role.MEMBER, true);
+            members = userRepository.findByRolesContainingAndActive(Role.MEMBER, true, pageable).getContent();
         }
 
         return ResponseEntity.ok(members);
