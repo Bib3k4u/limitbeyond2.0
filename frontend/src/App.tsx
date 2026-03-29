@@ -12,6 +12,11 @@ import Dashboard from "./pages/dashboard/Dashboard";
 import MouseFollower from "./components/ui/MouseFollower";
 import authService from './services/api/authService';
 import ExerciseList from "./pages/exercise/ExerciseList";
+import API_BASE_URL from './services/api/config';
+
+// Wake up the Render backend as soon as the app loads so it's ready
+// by the time the user logs in and navigates to any data page.
+fetch(`${API_BASE_URL}/health`).catch(() => {});
 
 const queryClient = new QueryClient({
   defaultOptions: {

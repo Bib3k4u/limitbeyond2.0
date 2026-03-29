@@ -83,7 +83,7 @@ export const muscleGroupsApi = {
 
   console.log('Received muscle groups:', response.data);
   // cache result 10 minutes
-  cache.set(key, response.data, 10 * 60 * 1000);
+  cache.set(key, response.data, 24 * 60 * 60 * 1000, true); // 24h, persisted
   return response;
     } catch (error) {
       console.warn("API call for muscle groups failed, using fallback data", error);

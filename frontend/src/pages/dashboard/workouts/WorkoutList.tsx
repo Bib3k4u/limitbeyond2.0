@@ -97,47 +97,49 @@ export const WorkoutList = () => {
     const fetchData = async () => {
       try {
         setLoading(true);
-        // Check user role and load members list for admin/trainer
-        try {
-          const profile = await userService.getCurrentUserProfile();
-          if (profile && (profile.roles?.includes('ADMIN') || profile.roles?.includes('TRAINER'))) {
-            setIsAdminOrTrainer(true);
-            // Fetch all pages of members so dropdown is complete
-            const allMembers = await userService.getAllMembersPages();
-            if (allMembers) setMembers(allMembers);
-          }
-        } catch (e: any) {
-          console.error('WorkoutList: failed to load profile or members', e?.message || e);
-          toast({ title: 'Warning', description: 'Unable to load members. Check your authentication.', variant: 'destructive' });
-        }
 
-        // Determine requested member id from selected filter or url
         const queryParams = new URLSearchParams(location.search);
         const requestedMemberId = queryParams.get('memberId') || (selectedMemberFilter && selectedMemberFilter !== 'all' ? selectedMemberFilter : undefined);
-        let allWorkouts: Workout[] = [];
-        try {
-          const resp = await workoutApi.getAll(requestedMemberId || undefined, 0, PAGE_SIZE);
-          allWorkouts = resp?.data || [];
-          setCurrentPage(0);
-          setHasMore(allWorkouts.length === PAGE_SIZE);
-        } catch (wx) {
-          console.error('WorkoutList: workouts API error', wx);
+
+        // Fetch profile + workouts + exercises in parallel — single round-trip cost
+        const [profileResult, workoutsResult, exercisesResult] = await Promise.allSettled([
+          userService.getCurrentUserProfile(),
+          workoutApi.getAll(requestedMemberId || undefined, 0, PAGE_SIZE),
+          exerciseTemplatesApi.getAll(),
+        ]);
+
+        // ── Profile ───────────────────────────────────────────────────────────
+        let profile: any = null;
+        if (profileResult.status === 'fulfilled') {
+          profile = profileResult.value;
+          if (profile?.roles?.includes('ADMIN') || profile?.roles?.includes('TRAINER')) {
+            setIsAdminOrTrainer(true);
+            // Load members list in background — don't block the workout render
+            userService.getAllMembersPages()
+              .then(m => { if (m) setMembers(m); })
+              .catch(e => console.error('WorkoutList: members load failed', e));
+          }
+        } else {
+          console.error('WorkoutList: profile load failed', profileResult.reason);
         }
 
-        // Respect role-based visibility:
-        // - ADMIN: see all workouts
-        // - TRAINER: see workouts for assigned members only
-        // - MEMBER: see only their own workouts
-        try {
-          const profile = await userService.getCurrentUserProfile();
-          let filteredWorkouts = [...allWorkouts];
+        // ── Workouts ──────────────────────────────────────────────────────────
+        let allWorkouts: Workout[] = [];
+        if (workoutsResult.status === 'fulfilled') {
+          allWorkouts = workoutsResult.value?.data || [];
+          setCurrentPage(0);
+          setHasMore(allWorkouts.length === PAGE_SIZE);
+        } else {
+          console.error('WorkoutList: workouts load failed', workoutsResult.reason);
+        }
 
+        // ── Role-based filtering (using the profile we already have) ──────────
+        let filteredWorkouts = [...allWorkouts];
+        if (profile) {
           if (profile.roles?.includes('ADMIN')) {
-            console.debug('User is ADMIN, showing all workouts', allWorkouts.length);
             filteredWorkouts = allWorkouts;
           } else if (profile.roles?.includes('TRAINER')) {
             const assigned = profile.assignedMembers || [];
-            console.debug('User is TRAINER, assignedMembers=', assigned);
             if (requestedMemberId) {
               if (!assigned.includes(requestedMemberId)) {
                 toast({ title: 'Access denied', description: 'You are not assigned to this member.', variant: 'destructive' });
@@ -151,24 +153,15 @@ export const WorkoutList = () => {
           } else if (profile.roles?.includes('MEMBER')) {
             filteredWorkouts = allWorkouts.filter(w => w.member && w.member.id === profile.id);
           }
-
-          // Sort workouts by date (newest first)
-          filteredWorkouts.sort((a, b) =>
-            new Date(b.scheduledDate).getTime() - new Date(a.scheduledDate).getTime()
-          );
-          setWorkouts(filteredWorkouts);
-        } catch (err) {
-          console.error('Failed to fetch profile for role-based filtering:', err);
-          // Sort all workouts by date (newest first) as fallback
-          setWorkouts([...allWorkouts].sort((a, b) =>
-            new Date(b.scheduledDate).getTime() - new Date(a.scheduledDate).getTime()
-          ));
         }
+        filteredWorkouts.sort((a, b) =>
+          new Date(b.scheduledDate).getTime() - new Date(a.scheduledDate).getTime()
+        );
+        setWorkouts(filteredWorkouts);
 
-        // Fetch exercises for filter
-        const exercisesResponse = await exerciseTemplatesApi.getAll();
-        if (exercisesResponse?.data) {
-          setExercises(exercisesResponse.data);
+        // ── Exercises ─────────────────────────────────────────────────────────
+        if (exercisesResult.status === 'fulfilled' && exercisesResult.value?.data) {
+          setExercises(exercisesResult.value.data);
         }
       } catch (error) {
         console.error('Error fetching data:', error);

@@ -47,76 +47,56 @@ const ExerciseList = () => {
   const [isAdminOrTrainer, setIsAdminOrTrainer] = useState(false);
   const { register, handleSubmit, reset, setValue } = useForm();
   
-  // Fetch muscle groups
+  // Fetch muscle groups + profile in parallel on mount (exercises fetched below)
   useEffect(() => {
-  const fetchMuscleGroups = async () => {
-      try {
-    const response = await muscleGroupsApi.getAll();
-    if (response?.data) setMuscleGroups(response.data);
-    else throw new Error("No muscle groups data received");
-      } catch (error) {
-        console.error("Failed to fetch muscle groups:", error);
-        toast({
-          title: "Error",
-          description: "Failed to load muscle groups. Please try again.",
-          variant: "destructive",
-        });
-        setError("Failed to load muscle groups. Please try again later.");
+    const init = async () => {
+      const [mgResult, profileResult] = await Promise.allSettled([
+        muscleGroupsApi.getAll(),
+        userService.getCurrentUserProfile(),
+      ]);
+      if (mgResult.status === 'fulfilled' && mgResult.value?.data) {
+        setMuscleGroups(mgResult.value.data);
       }
-    };
-    
-    fetchMuscleGroups();
-  }, [toast]);
-
-  // Check user role
-  useEffect(() => {
-    const check = async () => {
-      try {
-        const profile = await userService.getCurrentUserProfile();
-        if (profile && (profile.roles?.includes('ADMIN') || profile.roles?.includes('TRAINER'))) {
+      if (profileResult.status === 'fulfilled' && profileResult.value) {
+        const p = profileResult.value;
+        if (p.roles?.includes('ADMIN') || p.roles?.includes('TRAINER')) {
           setIsAdminOrTrainer(true);
         }
-      } catch (e) {
-        // ignore
       }
     };
-    check();
+    init();
   }, []);
-  
-  // Fetch exercises
+
+  // Fetch exercises whenever muscle group filter changes
   useEffect(() => {
     const fetchExercises = async () => {
       setLoading(true);
       setError(null);
       try {
-  // Fetch exercises (cached by exerciseTemplatesApi)
-        let response;
-        if (selectedMuscleGroup && selectedMuscleGroup !== "all") {
-          response = await exerciseTemplatesApi.getByMuscleGroup(selectedMuscleGroup);
-        } else {
-          response = await exerciseTemplatesApi.getAll();
-        }
-        
+        // Always fetch all and filter client-side — avoids broken by-muscle-group endpoint
+        const response = await exerciseTemplatesApi.getAll();
         if (response?.data) {
-          const validExercises = response.data.map((exercise: any) => ({
+          let list = response.data.map((exercise: any) => ({
             ...exercise,
             name: exercise.name || 'Unnamed Exercise',
             description: exercise.description || 'No description available',
             muscleGroups: exercise.muscleGroups || []
           }));
-          setExercises(validExercises);
-          setFilteredExercises(validExercises);
+          if (selectedMuscleGroup && selectedMuscleGroup !== 'all') {
+            list = list.filter((ex: any) =>
+              (ex.muscleGroups || []).some((mg: any) =>
+                mg.id === selectedMuscleGroup || mg.name === selectedMuscleGroup
+              )
+            );
+          }
+          setExercises(list);
+          setFilteredExercises(list);
         } else {
-          console.error("No data property in API response:", response);
           throw new Error("No exercises data received");
         }
       } catch (error) {
         console.error("Failed to fetch exercises:", error);
-        toast({
-          title: "Error",
-          description: "Failed to load exercises. Please try again.",
-          variant: "destructive",
-        });
+        toast({ title: "Error", description: "Failed to load exercises. Please try again.", variant: "destructive" });
         setError("Failed to load exercises. Please try again later.");
         setExercises([]);
         setFilteredExercises([]);
@@ -124,7 +104,6 @@ const ExerciseList = () => {
         setLoading(false);
       }
     };
-    
     fetchExercises();
   }, [selectedMuscleGroup, toast]);
   

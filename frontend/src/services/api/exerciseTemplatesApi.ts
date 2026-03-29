@@ -8,21 +8,20 @@ export const exerciseTemplatesApi = {
     if (cached) return { data: cached } as any;
     const token = localStorage.getItem('token');
     // If no token, call public endpoint directly (avoid auth failure roundtrip)
+    const TTL = 24 * 60 * 60 * 1000; // 24 h — exercises rarely change
     if (!token) {
       const resp = await axiosInstance.get('/exercise-templates/public');
-      cache.set(key, resp.data, 10 * 60 * 1000);
+      cache.set(key, resp.data, TTL, true);
       return resp;
     }
     try {
-      // Authenticated call when token present
       const resp = await axiosInstance.get('/exercise-templates');
-      cache.set(key, resp.data, 10 * 60 * 1000);
+      cache.set(key, resp.data, TTL, true);
       return resp;
     } catch (error: any) {
       if (error.response?.status === 403 || error.response?.status === 401) {
-        // Fallback to public endpoint if authentication fails
         const resp = await axiosInstance.get('/exercise-templates/public');
-        cache.set(key, resp.data, 10 * 60 * 1000);
+        cache.set(key, resp.data, TTL, true);
         return resp;
       }
       throw error;
