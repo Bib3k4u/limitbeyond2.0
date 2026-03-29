@@ -98,11 +98,12 @@ public class AIWorkoutServiceImpl implements AIWorkoutService {
         }
 
         List<Workout> recentWorkouts = workoutService.findByMember(user);
+        // Sets are now embedded — use the parent workout's scheduledDate for sorting
         List<WorkoutSet> lastFiveSets = recentWorkouts.stream()
-                .flatMap(w -> w.getSets().stream())
-                .filter(s -> s.getExercise() != null && s.getExercise().getId().equals(exerciseId))
-                .filter(s -> s.getWorkout() != null && s.getWorkout().getScheduledDate() != null)
-                .sorted((s1, s2) -> s2.getWorkout().getScheduledDate().compareTo(s1.getWorkout().getScheduledDate()))
+                .filter(w -> w.getScheduledDate() != null)
+                .sorted((a, b) -> b.getScheduledDate().compareTo(a.getScheduledDate()))
+                .flatMap(w -> w.getSets().stream()
+                        .filter(s -> s.getExercise() != null && s.getExercise().getId().equals(exerciseId)))
                 .limit(5)
                 .collect(Collectors.toList());
 
@@ -213,8 +214,8 @@ public class AIWorkoutServiceImpl implements AIWorkoutService {
             return getDefaultSuggestions();
         }
 
+        // previousSets already arrive in descending date order (sorted at call site)
         List<WorkoutSet> latestSets = previousSets.stream()
-                .sorted((s1, s2) -> s2.getWorkout().getScheduledDate().compareTo(s1.getWorkout().getScheduledDate()))
                 .limit(3)
                 .collect(Collectors.toList());
 

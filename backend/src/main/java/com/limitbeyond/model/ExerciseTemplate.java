@@ -1,9 +1,13 @@
 package com.limitbeyond.model;
 
 import org.springframework.data.annotation.Id;
-import org.springframework.data.mongodb.core.mapping.DBRef;
 import org.springframework.data.mongodb.core.mapping.Document;
 
+/**
+ * Muscle groups are stored INLINE — no @DBRef.
+ * Previously: 1 + (219 exercises × 2 muscle group refs) = 439 MongoDB queries per list call.
+ * Now: 1 query. The entire exercise list returns in a single round-trip.
+ */
 @Document(collection = "exercise_templates")
 public class ExerciseTemplate {
     @Id
@@ -11,10 +15,8 @@ public class ExerciseTemplate {
 
     private String name;
 
-    @DBRef(lazy = false)
+    // Embedded inline — no separate collection lookups on read
     private MuscleGroup primaryMuscleGroup;
-
-    @DBRef(lazy = false)
     private MuscleGroup secondaryMuscleGroup;
 
 

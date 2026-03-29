@@ -28,7 +28,7 @@ public class Workout {
     private String name;
     private String description;
 
-    @DBRef
+    // Embedded inline — sets live inside the workout document, no @DBRef, no N+1
     private List<WorkoutSet> sets = new ArrayList<>();
 
     // New: explicitly store target muscle groups selected for this workout

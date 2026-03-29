@@ -1,21 +1,26 @@
 package com.limitbeyond.repository;
 
 import com.limitbeyond.model.ExerciseTemplate;
-import com.limitbeyond.model.MuscleGroup;
 import org.springframework.data.mongodb.repository.MongoRepository;
 
 import java.util.List;
 import java.util.Optional;
 
+/**
+ * Muscle groups are now embedded inside ExerciseTemplate (no @DBRef).
+ * Derived queries use the embedded field path: primaryMuscleGroup.id → primaryMuscleGroup._id in MongoDB.
+ */
 public interface ExerciseTemplateRepository extends MongoRepository<ExerciseTemplate, String> {
+
     Optional<ExerciseTemplate> findByName(String name);
 
     Optional<ExerciseTemplate> findByNameIgnoreCase(String name);
 
-    List<ExerciseTemplate> findByPrimaryMuscleGroup(MuscleGroup muscleGroup);
+    // Query by embedded muscle group id
+    List<ExerciseTemplate> findByPrimaryMuscleGroupId(String primaryMuscleGroupId);
 
-    List<ExerciseTemplate> findBySecondaryMuscleGroup(MuscleGroup muscleGroup);
+    List<ExerciseTemplate> findBySecondaryMuscleGroupId(String secondaryMuscleGroupId);
 
-    List<ExerciseTemplate> findByPrimaryMuscleGroupOrSecondaryMuscleGroup(MuscleGroup primaryMuscleGroup,
-                                                                          MuscleGroup secondaryMuscleGroup);
+    List<ExerciseTemplate> findByPrimaryMuscleGroupIdOrSecondaryMuscleGroupId(
+            String primaryMuscleGroupId, String secondaryMuscleGroupId);
 }

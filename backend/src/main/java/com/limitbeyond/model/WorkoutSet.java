@@ -1,19 +1,21 @@
 package com.limitbeyond.model;
 
 import org.springframework.data.annotation.Id;
-import org.springframework.data.mongodb.core.mapping.DBRef;
-import org.springframework.data.mongodb.core.mapping.Document;
 
-@Document(collection = "workout_sets")
+/**
+ * WorkoutSet is now embedded inside Workout — NOT a top-level MongoDB document.
+ * Removing @Document and @DBRef eliminates the N+1 query explosion:
+ * previously each WorkoutSet (and its @DBRef exercise) triggered individual DB round-trips.
+ * Now the entire workout including all sets loads in a single query.
+ *
+ * IDs are assigned manually (UUID) when sets are created.
+ */
 public class WorkoutSet {
     @Id
     private String id;
 
-    @DBRef
+    // Embedded inline — no @DBRef, no separate collection lookup
     private ExerciseTemplate exercise;
-
-    @DBRef
-    private Workout workout;
 
     private int reps;
     private Double weight; // Optional, may be null for bodyweight exercises
@@ -91,11 +93,4 @@ public class WorkoutSet {
         this.volume = volume;
     }
 
-    public Workout getWorkout() {
-        return workout;
-    }
-
-    public void setWorkout(Workout workout) {
-        this.workout = workout;
-    }
 }

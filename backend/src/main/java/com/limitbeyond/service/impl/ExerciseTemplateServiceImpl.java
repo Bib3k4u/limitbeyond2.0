@@ -7,6 +7,8 @@ import com.limitbeyond.repository.ExerciseTemplateRepository;
 import com.limitbeyond.service.ExerciseTemplateService;
 import com.limitbeyond.service.MuscleGroupService;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -24,6 +26,7 @@ public class ExerciseTemplateServiceImpl implements ExerciseTemplateService {
     private MuscleGroupService muscleGroupService;
 
     @Override
+    @CacheEvict(value = "exercises", allEntries = true)
     public ExerciseTemplate createExerciseTemplate(ExerciseTemplateRequest request) {
         // Check if an exercise with the same name already exists
         if (exerciseTemplateRepository.findByName(request.getName()).isPresent()) {
@@ -62,13 +65,16 @@ public class ExerciseTemplateServiceImpl implements ExerciseTemplateService {
     }
 
     @Override
+    @Cacheable("exercises")
     public List<ExerciseTemplate> findAll() {
         return exerciseTemplateRepository.findAll();
     }
 
     @Override
     public List<ExerciseTemplate> findByMuscleGroup(MuscleGroup muscleGroup) {
-        return exerciseTemplateRepository.findByPrimaryMuscleGroupOrSecondaryMuscleGroup(muscleGroup, muscleGroup);
+        // Uses embedded field path now (not DBRef $id)
+        return exerciseTemplateRepository.findByPrimaryMuscleGroupIdOrSecondaryMuscleGroupId(
+                muscleGroup.getId(), muscleGroup.getId());
     }
 
     @Override
@@ -83,6 +89,7 @@ public class ExerciseTemplateServiceImpl implements ExerciseTemplateService {
     }
 
     @Override
+    @CacheEvict(value = "exercises", allEntries = true)
     public ExerciseTemplate update(String id, ExerciseTemplateRequest request) {
         ExerciseTemplate exerciseTemplate = findById(id);
 
@@ -112,6 +119,7 @@ public class ExerciseTemplateServiceImpl implements ExerciseTemplateService {
     }
 
     @Override
+    @CacheEvict(value = "exercises", allEntries = true)
     public void delete(String id) {
         if (!exerciseTemplateRepository.existsById(id)) {
             throw new RuntimeException("Exercise template with id " + id + " not found");
