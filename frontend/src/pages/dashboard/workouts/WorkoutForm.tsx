@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
+import { ExerciseVisualizer } from '@/components/workout/ExerciseVisualizer';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
-import { Loader2, Plus, Trash2, Search, Calculator, Check, ArrowUp, Sparkles } from 'lucide-react';
+import { Loader2, Plus, Trash2, Search, Calculator, Check, ArrowUp, Sparkles, ChevronDown, TrendingUp } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -28,6 +29,7 @@ import { workoutApi } from '@/services/api/workoutApi';
 import { exerciseTemplatesApi } from '@/services/api/exerciseTemplatesApi';
 import { muscleGroupsApi } from '@/services/api/muscleGroupsApi';
 import userService from '@/services/api/userService';
+import { checkinApi } from '@/services/api/checkinApi';
 import { aiWorkoutApi } from '@/services/api/aiWorkout';
 import { WorkoutRequest } from '@/types/workout';
 import { format } from 'date-fns';
@@ -68,13 +70,6 @@ interface SelectedExercise {
   }>;
 }
 
-interface AISuggestion {
-  exerciseId: string;
-  sets: Array<{
-    reps: number;
-    weight: number;
-  }>;
-}
 
 const WorkoutForm = () => {
   const { id } = useParams();
@@ -94,184 +89,94 @@ const WorkoutForm = () => {
   const [selectedExercises, setSelectedExercises] = useState<SelectedExercise[]>([]);
   const [showExerciseSelector, setShowExerciseSelector] = useState(false);
   const [previousVolumes, setPreviousVolumes] = useState<Record<string, number>>({});
-  const [aiSuggestions, setAiSuggestions] = useState<Record<string, AISuggestion>>({});
+  const [previousSets, setPreviousSets] = useState<Record<string, Array<{ reps: number; weight: number }>>>({});
+  const [allWorkoutsHistory, setAllWorkoutsHistory] = useState<any[]>([]);
+  const [openHistoryIndex, setOpenHistoryIndex] = useState<number | null>(null);
   const [loadingSuggestions, setLoadingSuggestions] = useState<Record<string, boolean>>({});
 
-  const handleAISuggestions = async (exerciseId: string) => {
-    if (!exerciseId) {
-      console.error('No exercise ID provided');
-      return;
-    }
+  const handleAISuggestions = async (exerciseIndex: number) => {
+    const exercise = selectedExercises[exerciseIndex];
+    if (!exercise?.exerciseId) return;
+    const exerciseId = exercise.exerciseId;
 
+    setLoadingSuggestions(prev => ({ ...prev, [exerciseId]: true }));
     try {
-      setLoadingSuggestions(prev => ({ ...prev, [exerciseId]: true }));
-      console.log('Requesting AI suggestions for exercise:', exerciseId);
-      
-      const response = await aiWorkoutApi.getProgressiveOverload(exerciseId);
-      console.log('AI Response:', response);
+      // Pull last 10 sessions for this exercise from already-fetched history
+      const sessions: Array<Array<{ reps: number; weight: number; completed?: boolean }>> = allWorkoutsHistory
+        .map(w => (w.sets || []).filter((s: any) => s.exercise?.id === exerciseId && s.weight > 0 && s.reps > 0)
+          .map((s: any) => ({ reps: s.reps, weight: s.weight, completed: s.completed })))
+        .filter(s => s.length > 0)
+        .slice(-10);
 
-      let suggestions;
-      if (response?.data?.sets && Array.isArray(response.data.sets) && response.data.sets.length > 0) {
-        console.log('Using AI suggestions:', response.data.sets);
-        suggestions = {
-          exerciseId,
-          sets: response.data.sets
-        };
+      let suggestedSets: Array<{ reps: number; weight: number }>;
+      let toastDesc: string;
+
+      if (sessions.length > 0) {
+        const lastSets = sessions[sessions.length - 1];
+        // Progressive overload: increase weight if last session was completed or consistent
+        // Check if all sets were at/above a good rep count
+        const avgReps = lastSets.reduce((a, s) => a + s.reps, 0) / lastSets.length;
+        const allCompleted = lastSets.every(s => s.completed !== false);
+        const shouldProgress = allCompleted && avgReps >= 6;
+
+        // Check last 3 sessions to see if weight has been stuck
+        const recentWeights = sessions.slice(-3).map(sess =>
+          sess.reduce((max, s) => Math.max(max, s.weight), 0)
+        );
+        const weightIsStuck = recentWeights.length >= 2 && recentWeights.every(w => w === recentWeights[0]);
+
+        const increment = weightIsStuck || shouldProgress ? 2.5 : 0;
+
+        suggestedSets = lastSets.map(s => ({
+          reps: s.reps,
+          weight: Math.round((s.weight + increment) * 2) / 2, // round to nearest 0.5kg
+        }));
+
+        const analysed = sessions.length;
+        toastDesc = increment > 0
+          ? `Analysed ${analysed} session${analysed > 1 ? 's' : ''} — progressed weight by +${increment}kg ↑`
+          : `Analysed ${analysed} session${analysed > 1 ? 's' : ''} — consolidating at current weight`;
       } else {
-        console.log('Using default suggestions');
-        // Fallback to default suggestions
-        suggestions = {
-          exerciseId,
-          sets: [
-            { reps: 12, weight: 50 },
-            { reps: 10, weight: 55 },
-            { reps: 8, weight: 60 }
-          ]
-        };
+        // No history at all — try backend, then fall back gracefully
+        try {
+          const resp = await aiWorkoutApi.getProgressiveOverload(exerciseId);
+          const backendSets = resp?.data?.sets;
+          if (Array.isArray(backendSets) && backendSets.length > 0) {
+            suggestedSets = backendSets.map((s: any) => ({ reps: s.reps || 10, weight: s.weight || 20 }));
+            toastDesc = 'AI-generated starter plan applied';
+          } else {
+            throw new Error('empty');
+          }
+        } catch {
+          suggestedSets = [
+            { reps: 10, weight: 20 },
+            { reps: 10, weight: 20 },
+            { reps: 10, weight: 20 },
+          ];
+          toastDesc = 'No history found — starter weights applied. Adjust as needed.';
+        }
       }
 
-      console.log('Final suggestions object:', suggestions);
-
-      console.log('Setting suggestions:', suggestions);
-      
-      // Ensure we have valid sets
-      if (!Array.isArray(suggestions.sets) || suggestions.sets.length === 0) {
-        console.error('Invalid suggestions format:', suggestions);
-        toast({
-          title: 'Error',
-          description: 'Received invalid suggestions format. Using defaults.',
-          variant: 'destructive'
-        });
-        suggestions = {
-          exerciseId,
-          sets: [
-            { reps: 12, weight: 50 },
-            { reps: 10, weight: 55 },
-            { reps: 8, weight: 60 }
-          ]
-        };
-      }
-      
-      // Ensure each set has reps and weight
-      suggestions.sets = suggestions.sets.map((set, index) => ({
-        reps: set.reps || 12 - (index * 2),
-        weight: set.weight || 50 + (index * 5)
-      }));
-
-      console.log('Final processed suggestions:', suggestions);
-      
-      setAiSuggestions(prev => {
-        const newState = {
-          ...prev,
-          [exerciseId]: suggestions
-        };
-        console.log('New aiSuggestions state:', newState);
-        return newState;
-      });
-
-      toast({
-        title: 'AI Suggestions Ready',
-        description: `Got ${suggestions.sets.length} sets of suggestions. Click again to apply.`,
-        variant: 'default'
-      });
-    } catch (error: any) {
-      console.error('Failed to get AI suggestions:', error);
-      toast({
-        title: 'Error',
-        description: error?.response?.data?.message || 'Failed to get AI suggestions. Using defaults instead.',
-        variant: 'destructive'
-      });
-
-      // Set default suggestions even on error
-      const defaultSuggestions = {
-        exerciseId,
-        sets: [
-          { reps: 12, weight: 50 },
-          { reps: 10, weight: 55 },
-          { reps: 8, weight: 60 }
-        ]
+      // Apply immediately — replace all sets on this exercise
+      const updatedExercises = [...selectedExercises];
+      updatedExercises[exerciseIndex] = {
+        ...exercise,
+        sets: suggestedSets.map((s, i) => ({
+          id: `${exerciseId}-ai-${i}-${Date.now()}`,
+          reps: s.reps,
+          weight: s.weight,
+          notes: '',
+        })),
       };
-      setAiSuggestions(prev => ({
-        ...prev,
-        [exerciseId]: defaultSuggestions
-      }));
+      setSelectedExercises(updatedExercises);
+
+      toast({ title: `✓ ${exercise.exerciseName} — progressive overload applied`, description: toastDesc });
+    } catch (err) {
+      toast({ title: 'Error', description: 'Could not compute suggestions.', variant: 'destructive' });
     } finally {
       setLoadingSuggestions(prev => ({ ...prev, [exerciseId]: false }));
     }
   };
-
-  const getAISuggestions = React.useCallback((exerciseId: string) => {
-    handleAISuggestions(exerciseId);
-  }, []);
-
-  const applyAISuggestions = React.useCallback((exerciseIndex: number) => {
-    console.log('Applying suggestions for exercise index:', exerciseIndex);
-    console.log('Current selected exercises:', selectedExercises);
-    console.log('Current AI suggestions:', aiSuggestions);
-
-    const exercise = selectedExercises[exerciseIndex];
-    if (!exercise?.exerciseId) {
-      console.error('No exercise ID found at index:', exerciseIndex);
-      return;
-    }
-
-    const suggestion = aiSuggestions[exercise.exerciseId];
-    console.log('Found suggestions for exercise:', exercise.exerciseName, suggestion);
-    
-    if (!suggestion?.sets?.length) {
-      console.error('No suggestions found for exercise:', exercise.exerciseName);
-      toast({
-        title: 'Error',
-        description: 'No suggestions available. Try requesting new suggestions.',
-        variant: 'destructive'
-      });
-      return;
-    }
-
-    try {
-      // Create a new array for all exercises
-      const updatedExercises = [...selectedExercises];
-      
-      // Create the updated exercise with suggested sets
-      const updatedExercise = {
-        ...exercise,
-        sets: suggestion.sets.map((set: any, index: number) => ({
-          id: `${exercise.exerciseId}-suggested-${index}-${Date.now()}`,
-          reps: Number(set.reps) || 10,
-          weight: Number(set.weight) || 50,
-          notes: `AI suggested: ${set.reps} reps at ${set.weight}kg`
-        }))
-      };
-
-      console.log('Updated exercise object:', updatedExercise);
-      
-      // Update the exercise at the specific index
-      updatedExercises[exerciseIndex] = updatedExercise;
-      setSelectedExercises(updatedExercises);
-      
-      console.log('New selected exercises state:', updatedExercises);
-
-      // Clear the suggestions after applying them
-      setAiSuggestions(prev => {
-        const newState = { ...prev };
-        delete newState[exercise.exerciseId];
-        return newState;
-      });
-
-      toast({
-        title: 'Success',
-        description: `Applied ${suggestion.sets.length} AI-suggested sets to ${exercise.exerciseName}`,
-        variant: 'default'
-      });
-    } catch (error) {
-      console.error('Error applying suggestions:', error);
-      toast({
-        title: 'Error',
-        description: 'Failed to apply suggestions. Please try again.',
-        variant: 'destructive'
-      });
-    }
-  }, [selectedExercises, aiSuggestions, toast]);
 
   const form = useForm<WorkoutFormData>({
     defaultValues: {
@@ -527,6 +432,12 @@ const WorkoutForm = () => {
         const resp = await workoutApi.getAll(memberToQuery);
         const workouts = resp?.data || [];
 
+        // Store sorted ascending for history charts
+        const ascSorted = [...workouts].sort((a: any, b: any) =>
+          new Date(a.scheduledDate || a.date || 0).getTime() - new Date(b.scheduledDate || b.date || 0).getTime()
+        );
+        setAllWorkoutsHistory(ascSorted);
+
         // Sort workouts by scheduledDate (descending) to find the most recent
         workouts.sort((a: any, b: any) => {
           const ad = a.scheduledDate || a.date || null;
@@ -535,21 +446,24 @@ const WorkoutForm = () => {
         });
 
         const map: Record<string, number> = {};
+        const setsMap: Record<string, Array<{ reps: number; weight: number }>> = {};
 
         // For each selected exercise, find the most recent workout that includes it
         for (const se of selectedExercises) {
           const found = workouts.find((w: any) => (w.sets || []).some((s: any) => s.exercise?.id === se.exerciseId));
           if (found) {
-            const total = (found.sets || [])
-              .filter((s: any) => s.exercise?.id === se.exerciseId)
-              .reduce((acc: number, s: any) => acc + ((s.weight || 0) * (s.reps || 0)), 0);
+            const matchingSets = (found.sets || []).filter((s: any) => s.exercise?.id === se.exerciseId);
+            const total = matchingSets.reduce((acc: number, s: any) => acc + ((s.weight || 0) * (s.reps || 0)), 0);
             map[se.exerciseId] = total;
+            setsMap[se.exerciseId] = matchingSets.map((s: any) => ({ reps: s.reps || 0, weight: s.weight || 0 }));
           } else {
             map[se.exerciseId] = 0;
+            setsMap[se.exerciseId] = [];
           }
         }
 
         setPreviousVolumes(map);
+        setPreviousSets(setsMap);
       } catch (e) {
         console.error('Failed to fetch previous workouts for volume calculation', e);
         setPreviousVolumes({});
@@ -670,6 +584,15 @@ const WorkoutForm = () => {
         });
       } else {
         await workoutApi.create(payload);
+        // Auto check-in for the workout's scheduled date
+        try {
+          if (currentUser?.id && payload.date) {
+            const occurredAt = payload.date + 'T12:00:00';
+            await checkinApi.addCheckin(currentUser.id, occurredAt);
+          }
+        } catch (e) {
+          // silent — checkin is a convenience side-effect
+        }
         toast({
           title: 'Success',
           description: 'Workout created successfully',
@@ -708,9 +631,9 @@ const WorkoutForm = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-center">
         <h1 className="text-2xl font-bold">{id ? 'Edit Workout' : 'Create New Workout'}</h1>
-        <Button variant="outline" onClick={() => navigate('/dashboard/workouts')}>
+        <Button variant="outline" className="w-full sm:w-auto" onClick={() => navigate('/dashboard/workouts')}>
           Cancel
         </Button>
       </div>
@@ -845,48 +768,29 @@ const WorkoutForm = () => {
               <Card key={exercise.exerciseId} className="p-4 bg-lb-card border-white/10">
                 <div className="flex flex-col md:flex-row lg:flex-row xl:flex-row gap-2 justify-between items-start mb-4">
                   <div>
-                    <div className="flex flex-col md:flex-row lg:flex-row xl:flex-row items-start md:items-center lg:items-center xl:items-center gap-3">
+                    <div className="flex flex-wrap items-center gap-2">
                       <h3 className="font-semibold text-lg text-white">{exercise.exerciseName}</h3>
                       <Button
                         type="button"
                         variant="outline"
                         size="sm"
-                        className={`${
+                        className={`flex items-center gap-1.5 shrink-0 ${
                           exercise.exerciseId && loadingSuggestions?.[exercise.exerciseId]
                             ? 'bg-lb-accent/20'
-                            : exercise.exerciseId && aiSuggestions?.[exercise.exerciseId]
-                            ? 'bg-lb-accent text-white hover:bg-lb-accent/90'
                             : 'border-white/20 text-white hover:bg-white/10'
                         }`}
-                        onClick={() => {
-                          console.log('AI button clicked for exercise:', exercise);
-                          if (!exercise.exerciseId) {
-                            console.error('No exercise ID found');
-                            return;
-                          }
-                          
-                          if (aiSuggestions?.[exercise.exerciseId]) {
-                            console.log('Applying existing suggestions');
-                            applyAISuggestions(exerciseIndex);
-                          } else {
-                            console.log('Getting new suggestions');
-                            getAISuggestions(exercise.exerciseId);
-                          }
-                        }}
+                        onClick={() => handleAISuggestions(exerciseIndex)}
                       >
                         {exercise.exerciseId && loadingSuggestions?.[exercise.exerciseId] ? (
                           <>
                             <Loader2 className="h-4 w-4 animate-spin" />
-                             AI...
-                          </>
-                        ) : exercise.exerciseId && aiSuggestions?.[exercise.exerciseId] ? (
-                          <>
-                            <Check className="h-4 w-4" />
-                            Apply
+                            AI...
                           </>
                         ) : (
                           <>
-                            <Sparkles className="h-4 w-4" />                          </>
+                            <Sparkles className="h-4 w-4" />
+                            AI Suggest
+                          </>
                         )}
                       </Button>
                     </div>
@@ -894,29 +798,178 @@ const WorkoutForm = () => {
                       {exercises.find(e => e.id === exercise.exerciseId)?.description || 'No description available'}
                     </p>
                   </div>
-                   {/* Previous volume tag */}
-                   <div className="gap-2 flex justify-between w-full">
-                      <div className="gap-2 flex">
-                      <Badge variant="secondary" className="text-xs bg-white/10 text-orange-500">
-                        Prev: {Number((previousVolumes[exercise.exerciseId] || 0)).toFixed(0)} kg
-                      </Badge>
-                      {/* Current computed volume tag */}
-                      <Badge variant="secondary" className="text-xs bg-white/10 text-green-400">
-                        Current: {Number(computeCurrentVolume(exercise)).toFixed(0)} kg
-                      </Badge>
-                      </div>
-                      <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => removeExercise(exerciseIndex)}
-                    className="border-red-500/50 text-red-400 hover:bg-red-500/20"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                      </div>
+                   {/* Previous + current volume and set details */}
+                   <div className="flex flex-col gap-2 w-full">
+                     <div className="flex justify-between items-start w-full gap-2">
+                       <div className="flex flex-wrap gap-2">
+                         <Badge variant="secondary" className="text-xs bg-white/10 text-orange-500">
+                           Prev vol: {Number((previousVolumes[exercise.exerciseId] || 0)).toFixed(0)} kg
+                         </Badge>
+                         <Badge variant="secondary" className="text-xs bg-white/10 text-green-400">
+                           Current: {Number(computeCurrentVolume(exercise)).toFixed(0)} kg
+                         </Badge>
+                       </div>
+                       <Button
+                         type="button"
+                         variant="outline"
+                         size="sm"
+                         onClick={() => removeExercise(exerciseIndex)}
+                         className="border-red-500/50 text-red-400 hover:bg-red-500/20 shrink-0"
+                       >
+                         <Trash2 className="h-4 w-4" />
+                       </Button>
+                     </div>
+                     {/* Previous sets breakdown */}
+                     {(previousSets[exercise.exerciseId]?.length ?? 0) > 0 && (
+                       <div className="flex flex-wrap gap-1.5 items-center">
+                         <span className="text-[10px] text-gray-500 uppercase tracking-wide">Last session:</span>
+                         {previousSets[exercise.exerciseId].map((s, i) => (
+                           <span key={i} className="text-[11px] bg-white/5 border border-white/10 rounded px-2 py-0.5 text-gray-300">
+                             {s.reps}<span className="text-gray-500">r</span> × {s.weight}<span className="text-gray-500">kg</span>
+                           </span>
+                         ))}
+                       </div>
+                     )}
+                   </div>
                   
                 </div>
+
+                <ExerciseVisualizer
+                  name={exercise.exerciseName}
+                  weight={exercise.sets.reduce((max, s) => Math.max(max, s.weight || 0), 0)}
+                />
+
+                {/* Volume history dropdown */}
+                {(() => {
+                  const history = allWorkoutsHistory
+                    .filter(w => (w.sets || []).some((s: any) => s.exercise?.id === exercise.exerciseId && s.weight && s.reps))
+                    .map(w => {
+                      const sets = (w.sets || []).filter((s: any) => s.exercise?.id === exercise.exerciseId && s.weight && s.reps);
+                      return {
+                        label: (() => { try { return format(new Date(w.scheduledDate || w.completedDate || Date.now()), 'MMM d'); } catch { return '?'; } })(),
+                        volume: sets.reduce((acc: number, s: any) => acc + s.weight * s.reps, 0),
+                      };
+                    })
+                    .slice(-7);
+                  const currentVol = computeCurrentVolume(exercise);
+                  const prevVol = previousVolumes[exercise.exerciseId] || 0;
+                  const diff = currentVol - prevVol;
+                  const maxVol = Math.max(...history.map(h => h.volume), currentVol, 1);
+                  const isOpen = openHistoryIndex === exerciseIndex;
+
+                  return (
+                    <div className="my-4 border-t border-white/10 pt-3">
+                      <button
+                        type="button"
+                        onClick={() => setOpenHistoryIndex(isOpen ? null : exerciseIndex)}
+                        className="flex items-center gap-2 text-xs text-gray-400 hover:text-white transition-colors w-full"
+                      >
+                        <TrendingUp className="h-3.5 w-3.5" />
+                        <span>Volume History</span>
+                        {history.length > 0 && <span className="text-gray-600">({history.length} sessions)</span>}
+                        <ChevronDown className={`h-3 w-3 ml-auto transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
+                      </button>
+
+                      {isOpen && (
+                        <div className="mt-2 p-3 bg-lb-dark/60 rounded-lg border border-white/10">
+                          {history.length === 0 && currentVol === 0 ? (
+                            <p className="text-xs text-gray-500 text-center py-2">No history yet — enter your first sets above!</p>
+                          ) : (
+                            <>
+                              {/* Comparison message */}
+                              {prevVol > 0 && currentVol > 0 && (
+                                <p className={`text-xs font-medium mb-2 ${diff > 0 ? 'text-green-400' : diff < 0 ? 'text-red-400' : 'text-gray-400'}`}>
+                                  {diff > 0
+                                    ? `↑ +${diff.toFixed(0)} kg vs last session — great progress!`
+                                    : diff < 0
+                                    ? `↓ ${diff.toFixed(0)} kg vs last session — push harder!`
+                                    : '= Same volume as last session — try to beat it!'}
+                                </p>
+                              )}
+
+                              {/* Stats row */}
+                              <div className="flex gap-5 mb-3 text-xs">
+                                <div>
+                                  <p className="text-gray-500">Last session</p>
+                                  <p className="text-white font-semibold">{prevVol > 0 ? `${prevVol.toFixed(0)} kg` : '—'}</p>
+                                </div>
+                                <div>
+                                  <p className="text-gray-500">This session</p>
+                                  <p className={`font-semibold ${currentVol > 0 ? 'text-lb-accent' : 'text-gray-500'}`}>
+                                    {currentVol > 0 ? `${currentVol.toFixed(0)} kg` : '0 kg'}
+                                  </p>
+                                </div>
+                              </div>
+
+                              {/* SVG area chart */}
+                              {(() => {
+                                const pts = [...history.map(h => h.volume), currentVol > 0 ? currentVol : 0];
+                                const n = pts.length;
+                                const labels = [...history.map(h => h.label), 'Now'];
+                                const W = 200, H = 50;
+                                const maxV = Math.max(...pts, 1);
+                                const coords = pts.map((v, i) => ({
+                                  x: n < 2 ? W / 2 : (i / (n - 1)) * W,
+                                  y: H - 10 - Math.max(2, (v / maxV) * (H - 16)),
+                                }));
+                                // Smooth bezier path
+                                const lineParts = coords.map((p, i) => {
+                                  if (i === 0) return `M ${p.x} ${p.y}`;
+                                  const prev = coords[i - 1];
+                                  const cx = (prev.x + p.x) / 2;
+                                  return `C ${cx} ${prev.y} ${cx} ${p.y} ${p.x} ${p.y}`;
+                                });
+                                const lineD = lineParts.join(' ');
+                                const areaD = `${lineD} L ${coords[n-1].x} ${H} L ${coords[0].x} ${H} Z`;
+                                const gradId = `area-grad-${exercise.exerciseId.replace(/[^a-z0-9]/gi, '')}`;
+                                return (
+                                  <div>
+                                    <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: 60 }} preserveAspectRatio="none">
+                                      <defs>
+                                        <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
+                                          <stop offset="0%" stopColor="rgb(249,115,22)" stopOpacity="0.35" />
+                                          <stop offset="100%" stopColor="rgb(249,115,22)" stopOpacity="0.02" />
+                                        </linearGradient>
+                                      </defs>
+                                      {/* Area fill */}
+                                      <path d={areaD} fill={`url(#${gradId})`} />
+                                      {/* Line */}
+                                      <path d={lineD} fill="none" stroke="rgb(249,115,22)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                                      {/* Data points */}
+                                      {coords.map((p, i) => (
+                                        <circle
+                                          key={i}
+                                          cx={p.x}
+                                          cy={p.y}
+                                          r={i === n - 1 ? 3.5 : 2.5}
+                                          fill={i === n - 1 ? 'rgb(249,115,22)' : 'rgba(249,115,22,0.55)'}
+                                          stroke={i === n - 1 ? 'rgba(249,115,22,0.4)' : 'none'}
+                                          strokeWidth={i === n - 1 ? 4 : 0}
+                                        />
+                                      ))}
+                                    </svg>
+                                    {/* X-axis labels */}
+                                    <div className="flex mt-0.5">
+                                      {labels.map((lbl, i) => (
+                                        <div
+                                          key={i}
+                                          className="flex-1 text-center"
+                                          style={{ fontSize: 8, color: i === n - 1 ? 'rgb(249,115,22)' : 'rgba(156,163,175,0.7)' }}
+                                        >
+                                          {lbl}
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                );
+                              })()}
+                            </>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
 
                 <div className="space-y-3">
                   {exercise.sets.map((set, setIndex) => (
@@ -931,9 +984,9 @@ const WorkoutForm = () => {
                             <Input
                               type="number"
                             placeholder="Reps"
-                            value={set.reps}
-                            onChange={(e) => updateSet(exerciseIndex, setIndex, 'reps', parseInt(e.target.value) || 10)}
-                            className="w-16 bg-lb-dark border-white/20 text-white"
+                            value={set.reps === 0 ? '' : set.reps}
+                            onChange={(e) => updateSet(exerciseIndex, setIndex, 'reps', e.target.value === '' ? 0 : parseInt(e.target.value) || 0)}
+                            className="w-20 bg-lb-dark border-white/20 text-white"
                             min="1"
                           />
                           <span className="text-sm text-gray-400">reps</span>
@@ -964,9 +1017,9 @@ const WorkoutForm = () => {
                             <Input
                               type="number"
                             placeholder="Weight"
-                            value={set.weight}
-                            onChange={(e) => updateSet(exerciseIndex, setIndex, 'weight', parseFloat(e.target.value) || 0)}
-                            className="w-16 bg-lb-dark border-white/20 text-white"
+                            value={set.weight === 0 ? '' : set.weight}
+                            onChange={(e) => updateSet(exerciseIndex, setIndex, 'weight', e.target.value === '' ? 0 : parseFloat(e.target.value) || 0)}
+                            className="w-20 bg-lb-dark border-white/20 text-white"
                             min="0"
                               step="0.5"
                           />

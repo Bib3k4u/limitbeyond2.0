@@ -1,10 +1,7 @@
 import axios from 'axios';
+import API_BASE_URL from './config';
 
-// const API_URL = 'http://107.21.176.88:8080/api'; // Adjust the base URL as needed
-// const API_URL = 'http://13.217.88.71:8080/api';
-// const API_URL = 'http://localhost:8080/api';  
-
-const API_URL = 'https://limitbeyond2-0.onrender.com/api';
+const API_URL = API_BASE_URL;
 
 
 // Create an axios instance

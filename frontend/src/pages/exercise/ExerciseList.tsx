@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { PageBanner } from "@/components/layout/PageBanner";
 import { Link } from "react-router-dom";
 import { exerciseTemplatesApi } from "@/services/api/exerciseTemplatesApi";
 import { muscleGroupsApi } from "@/services/api/muscleGroupsApi";
@@ -166,11 +167,13 @@ const ExerciseList = () => {
   
   return (
     <div className="space-y-6">
+      <PageBanner
+        title="Exercise Library"
+        subtitle="Browse and search available exercises"
+        imageUrl="https://images.unsplash.com/photo-1526506118085-60ce8714f8c5?w=1200&q=80&auto=format&fit=crop"
+      />
       <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-2xl font-bold">Exercise Library</h1>
-          <p className="text-muted-foreground">Browse and search available exercises</p>
-        </div>
+        <div />
         {isAdminOrTrainer && (
           <div className="flex gap-2">
             <Button onClick={() => setShowBulkModal(true)} variant="outline">Bulk Upload</Button>

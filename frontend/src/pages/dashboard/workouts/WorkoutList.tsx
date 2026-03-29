@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
+import { PageBanner } from '@/components/layout/PageBanner';
 import { Link } from 'react-router-dom';
 import { format } from 'date-fns';
-import { Plus, Calendar, Search, Copy, Edit, Trash2, TrendingUp, Filter } from 'lucide-react';
+import { Plus, Calendar, Search, Copy, Edit, Trash2, TrendingUp, Filter, CheckCircle } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -71,6 +72,7 @@ export const WorkoutList = () => {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [workoutToDelete, setWorkoutToDelete] = useState<Workout | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [completingIds, setCompletingIds] = useState<Set<string>>(new Set());
   const [dateRange, setDateRange] = useState<{ from: Date | undefined; to: Date | undefined }>({
     from: undefined,
     to: undefined,
@@ -80,6 +82,7 @@ export const WorkoutList = () => {
   const [exercises, setExercises] = useState<Array<{ id: string; name: string }>>([]);
   const [volumeData, setVolumeData] = useState<VolumeDataPoint[]>([]);
   const [graphLoading, setGraphLoading] = useState(false);
+  const [exerciseSearchTerm, setExerciseSearchTerm] = useState('');
   const [members, setMembers] = useState<Array<{ id: string; firstName: string; lastName: string; username: string }>>([]);
   const [selectedMemberFilter, setSelectedMemberFilter] = useState<string | 'all'>('all');
   const [isAdminOrTrainer, setIsAdminOrTrainer] = useState(false);
@@ -278,6 +281,23 @@ export const WorkoutList = () => {
     setShowDeleteDialog(true);
   };
 
+  const handleMarkComplete = async (workout: Workout) => {
+    setCompletingIds(prev => new Set(prev).add(workout.id));
+    try {
+      await workoutApi.completeWorkout(workout.id);
+      setWorkouts(prev => prev.map(w =>
+        w.id === workout.id
+          ? { ...w, completed: true, sets: w.sets.map(s => ({ ...s, completed: true })) }
+          : w
+      ));
+      toast({ title: 'Workout completed!', description: `${workout.name} marked as complete.` });
+    } catch (error) {
+      toast({ title: 'Error', description: 'Failed to mark workout as complete.', variant: 'destructive' });
+    } finally {
+      setCompletingIds(prev => { const next = new Set(prev); next.delete(workout.id); return next; });
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex justify-center items-center min-h-[400px]">
@@ -288,17 +308,21 @@ export const WorkoutList = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <h1 className="text-2xl font-bold">My Workouts</h1>
+      <PageBanner
+        title="My Workouts"
+        subtitle="Track and manage your training sessions"
+        imageUrl="https://images.unsplash.com/photo-1534438327276-14e5300c3a48?w=1200&q=80&auto=format&fit=crop"
+      />
+      <div className="flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-center">
         <div className="flex gap-2">
-          <Link to="/dashboard/workouts/templates">
-            <Button variant="outline">
+          <Link to="/dashboard/workouts/templates" className="flex-1 sm:flex-none">
+            <Button variant="outline" className="w-full">
               <Copy className="h-4 w-4 mr-2" />
               Use Templates
             </Button>
           </Link>
-          <Link to="/dashboard/workouts/new">
-            <Button className="bg-lb-accent hover:bg-lb-accent/90">
+          <Link to="/dashboard/workouts/new" className="flex-1 sm:flex-none">
+            <Button className="w-full bg-lb-accent hover:bg-lb-accent/90">
               <Plus className="h-4 w-4 mr-2" />
               New Workout
             </Button>
@@ -320,12 +344,23 @@ export const WorkoutList = () => {
                 <SelectValue placeholder="Select exercise" />
               </SelectTrigger>
               <SelectContent className="bg-lb-card border-white/10">
+                <div className="p-2 border-b border-white/10">
+                  <Input
+                    placeholder="Search exercises..."
+                    value={exerciseSearchTerm}
+                    onChange={(e) => setExerciseSearchTerm(e.target.value)}
+                    onKeyDown={(e) => e.stopPropagation()}
+                    className="bg-lb-darker border-white/20 text-white placeholder:text-gray-500 h-8 text-sm"
+                  />
+                </div>
                 <SelectItem value="all" className="text-white hover:bg-lb-darker">All Exercises</SelectItem>
-                {exercises.map((exercise) => (
-                  <SelectItem key={exercise.id} value={exercise.id} className="text-white hover:bg-lb-darker">
-                    {exercise.name}
-                  </SelectItem>
-                ))}
+                {exercises
+                  .filter(e => e.name.toLowerCase().includes(exerciseSearchTerm.toLowerCase()))
+                  .map((exercise) => (
+                    <SelectItem key={exercise.id} value={exercise.id} className="text-white hover:bg-lb-darker">
+                      {exercise.name}
+                    </SelectItem>
+                  ))}
               </SelectContent>
             </Select>
           </div>
@@ -343,8 +378,12 @@ export const WorkoutList = () => {
                   {
                     label: selectedExercise === 'all' ? 'Total Volume (kg)' : exercises.find(e => e.id === selectedExercise)?.name + ' Volume (kg)',
                     data: volumeData.map(d => d.volume),
-                    borderColor: '#3b82f6',
-                    backgroundColor: 'rgba(59, 130, 246, 0.2)',
+                    borderColor: 'rgb(249, 115, 22)',
+                    backgroundColor: 'rgba(249, 115, 22, 0.12)',
+                    pointBackgroundColor: 'rgb(249, 115, 22)',
+                    pointRadius: 4,
+                    pointHoverRadius: 6,
+                    borderWidth: 2,
                     tension: 0.3,
                     fill: true,
                   },
@@ -383,11 +422,14 @@ export const WorkoutList = () => {
                 },
                 plugins: {
                   legend: {
-                    labels: {
-                      color: '#D1D5DB',
-                    },
+                    labels: { color: 'rgba(255,255,255,0.6)', usePointStyle: true },
                   },
                   tooltip: {
+                    backgroundColor: 'rgba(15,15,25,0.92)',
+                    borderColor: 'rgba(249,115,22,0.3)',
+                    borderWidth: 1,
+                    titleColor: 'white',
+                    bodyColor: 'rgba(255,255,255,0.7)',
                     callbacks: {
                       afterBody: (context) => {
                         const dataPoint = volumeData[context[0].dataIndex];
@@ -467,54 +509,64 @@ export const WorkoutList = () => {
       {/* Workouts List */}
       {filteredWorkouts.length > 0 ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {filteredWorkouts.map((workout) => (
-            <Card key={workout.id} className="glass-card p-4 hover:translate-y-[-2px] transition-all">
-              <div className="flex flex-col sm:flex-row justify-between items-start gap-4">
-                <div className="flex-1 min-w-0">
-                  <h3 className="font-semibold truncate text-white">{workout.name}</h3>
-                  {workout.description && (
-                    <p className="text-sm text-gray-400 mt-1 line-clamp-2">
-                      {workout.description}
-                    </p>
-                  )}
-                  <div className="flex items-center gap-2 mt-2">
-                    <Calendar className="h-4 w-4 text-gray-400" />
-                    <span className="text-sm text-gray-400">
-                      {format(new Date(workout.scheduledDate), 'MMM dd, yyyy')}
+          {filteredWorkouts.map((workout) => {
+            const completedSets = workout.sets.filter(s => s.completed).length;
+            const totalSets = workout.sets.length;
+            const progressPct = totalSets > 0 ? Math.round((completedSets / totalSets) * 100) : 0;
+            return (
+              <Card
+                key={workout.id}
+                className="glass-card p-4 hover:translate-y-[-2px] transition-all flex flex-col cursor-pointer"
+                onClick={() => navigate(`/dashboard/workouts/${workout.id}`)}
+              >
+                {/* Name + completed badge */}
+                <div className="flex items-start justify-between gap-2 mb-1">
+                  <h3 className="font-semibold text-white leading-tight flex-1 min-w-0 truncate">{workout.name}</h3>
+                  {workout.completed && (
+                    <span className="shrink-0 text-xs bg-green-900/20 text-green-400 px-2 py-0.5 rounded-full border border-green-500/30">
+                      Completed
                     </span>
+                  )}
+                </div>
+
+                {/* Date */}
+                <div className="flex items-center gap-1.5 text-sm text-gray-400 mb-3">
+                  <Calendar className="h-4 w-4 shrink-0" />
+                  <span>{format(new Date(workout.scheduledDate), 'MMM dd, yyyy')}</span>
+                </div>
+
+                {/* Progress */}
+                <div className="mb-3">
+                  <div className="flex items-center justify-between text-xs text-gray-400 mb-1">
+                    <span>{completedSets} / {totalSets} sets</span>
+                    <span className="font-medium text-white">{progressPct}%</span>
                   </div>
-                  <div className="flex items-center gap-2 mt-2">
-                    <span className="text-sm text-gray-400">{workout.sets.length} sets</span>
-                    {workout.completed && (
-                      <span className="text-xs bg-green-900/20 text-green-400 px-2 py-1 rounded-full border border-green-500/30">
-                        Completed
-                      </span>
-                    )}
+                  <div className="h-1.5 bg-white/10 rounded-full overflow-hidden">
+                    <div
+                      className={`h-full rounded-full transition-all duration-300 ${workout.completed ? 'bg-green-500' : 'bg-lb-accent'}`}
+                      style={{ width: `${progressPct}%` }}
+                    />
                   </div>
                 </div>
-                <div className="flex flex-col gap-2 w-full sm:w-auto">
-                  <Link to={`/dashboard/workouts/${workout.id}`}>
-                    <Button variant="outline" size="sm" className="w-full sm:w-auto border-white/20 text-white hover:bg-white/10">
-                      View
+
+                {/* Actions */}
+                {!workout.completed && (
+                  <div className="mt-auto pt-1">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={(e) => { e.stopPropagation(); handleMarkComplete(workout); }}
+                      disabled={completingIds.has(workout.id)}
+                      className="w-full bg-green-600/20 hover:bg-green-600/40 text-green-400 border-green-500/30"
+                    >
+                      <CheckCircle className="h-4 w-4 mr-1.5" />
+                      {completingIds.has(workout.id) ? 'Saving...' : 'Mark Complete'}
                     </Button>
-                  </Link>
-                  <Link to={`/dashboard/workouts/edit/${workout.id}`}>
-                    <Button variant="outline" size="sm" className="w-full sm:w-auto border-white/20 text-white hover:bg-white/10">
-                      <Edit className="h-4 w-4" />
-                    </Button>
-                  </Link>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => openDeleteDialog(workout)}
-                    className="text-red-400 border-red-500/50 hover:bg-red-500/20 w-full sm:w-auto"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                </div>
-              </div>
-            </Card>
-          ))}
+                  </div>
+                )}
+              </Card>
+            );
+          })}
         </div>
       ) : (
         <div className="text-center p-6">

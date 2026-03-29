@@ -1,10 +1,7 @@
 import axios from 'axios';
+import API_BASE_URL from './config';
 
-// const API_URL = 'http://107.21.176.88:8080/api/users';
-// const API_URL = 'http://13.217.88.71:8080/api/users'; 
-// const API_URL = 'http://localhost:8080/api/users';
-
-const API_URL = 'https://limitbeyond2-0.onrender.com/api/users';
+const API_URL = `${API_BASE_URL}/users`;
 
 
 // Create an axios instance
@@ -158,6 +155,17 @@ export const userService = {
       return response.data;
     } catch (error) {
       console.error('Error updating profile:', error);
+      throw error;
+    }
+  },
+
+  // Update password
+  updatePassword: async (newPassword: string): Promise<{ message: string }> => {
+    try {
+      const response = await axiosInstance.put('/password', { newPassword });
+      return response.data;
+    } catch (error) {
+      console.error('Error updating password:', error);
       throw error;
     }
   },

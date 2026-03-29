@@ -81,16 +81,25 @@ export const workoutApi = {
 
 ,
 
-  completeSet: (workoutId: string, setId: string) => {
-    return axiosInstance.post(`/workouts/${workoutId}/sets/${setId}/complete`);
+  completeSet: async (workoutId: string, setId: string) => {
+    const resp = await axiosInstance.post(`/workouts/${workoutId}/sets/${setId}/complete`);
+    cache.del(`workout:${workoutId}`);
+    cache.clear('workouts:');
+    return resp;
   },
 
-  uncompleteSet: (workoutId: string, setId: string) => {
-    return axiosInstance.post(`/workouts/${workoutId}/sets/${setId}/uncomplete`);
+  uncompleteSet: async (workoutId: string, setId: string) => {
+    const resp = await axiosInstance.post(`/workouts/${workoutId}/sets/${setId}/uncomplete`);
+    cache.del(`workout:${workoutId}`);
+    cache.clear('workouts:');
+    return resp;
   },
 
-  completeWorkout: (workoutId: string) => {
-    return axiosInstance.post(`/workouts/${workoutId}/complete`);
+  completeWorkout: async (workoutId: string) => {
+    const resp = await axiosInstance.post(`/workouts/${workoutId}/complete`);
+    cache.del(`workout:${workoutId}`);
+    cache.clear('workouts:');
+    return resp;
   },
 
   copyWorkout: (workoutId: string, newDate: string) => {

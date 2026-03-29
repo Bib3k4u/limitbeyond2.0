@@ -1,5 +1,4 @@
 import { axiosInstance } from './axiosInstance';
-import BASE_URL from './config';
 
 export const aiWorkoutApi = {
   getSuggestions: (exerciseId: string, historyDays: number = 30) =>

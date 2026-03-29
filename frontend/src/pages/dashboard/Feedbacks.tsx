@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { PageBanner } from '@/components/layout/PageBanner';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
@@ -240,23 +241,18 @@ const Feedbacks: React.FC<FeedbacksProps> = ({ userProfile }) => {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">
-            {isMember ? "My Feedback" : "Feedback Management"}
-          </h1>
-          <p className="text-muted-foreground">
-            {isMember 
-              ? "Submit and track your feedback" 
-              : "View and respond to member feedback"
-            }
-          </p>
-        </div>
+      <PageBanner
+        title={isMember ? "My Feedback" : "Feedback Management"}
+        subtitle={isMember ? "Submit and track your feedback" : "View and respond to member feedback"}
+        imageUrl="https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=1200&q=80&auto=format&fit=crop"
+      />
+      <div className="flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-start">
+        <div />
         
         {isMember && (
           <Dialog open={createFormOpen} onOpenChange={setCreateFormOpen}>
             <DialogTrigger asChild>
-              <Button className="flex items-center gap-2">
+              <Button className="flex items-center gap-2 w-full sm:w-auto">
                 <Plus className="h-4 w-4" />
                 Submit Feedback
               </Button>

@@ -1,88 +1,59 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
+import { PageBanner } from '@/components/layout/PageBanner';
 import { checkinApi } from '@/services/api/checkinApi';
 import { useParams } from 'react-router-dom';
 import userService from '@/services/api/userService';
-import { format, subHours, subDays } from 'date-fns';
+import {
+  format, subDays, addDays,
+  isBefore, startOfDay, parseISO,
+} from 'date-fns';
+import { Calendar } from '@/components/ui/calendar';
+import { Card } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { CheckCircle, CalendarDays } from 'lucide-react';
+import { useToast } from '@/hooks/use-toast';
 
 export default function CheckinPage() {
   const { userId } = useParams();
   const [uid, setUid] = useState(userId || '');
   const [name, setName] = useState('');
   const [last, setLast] = useState<any>(null);
-  const [list, setList] = useState<any[]>([]);
-  const [activeTab, setActiveTab] = useState<'recent'|'today'|'7'|'30'>('recent');
+  const [checkins, setCheckins] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+  const [checking, setChecking] = useState(false);
+  const [currentMonth, setCurrentMonth] = useState<Date>(new Date());
+  const { toast } = useToast();
 
-  // If no userId provided, try to fetch current user
   useEffect(() => {
-    const tryCurrent = async () => {
+    const init = async () => {
       if (!uid) {
         try {
           const profile = await userService.getCurrentUserProfile();
           setUid(profile.id);
           setName(`${profile.firstName} ${profile.lastName}`);
-        } catch (e) {
-          // ignore
-        }
+        } catch (e) {}
       } else {
-        // load name when uid is provided
         try {
           const p = await userService.getUserById(uid);
           setName(`${p.firstName} ${p.lastName}`);
-        } catch (e) {
-          // ignore
-        }
+        } catch (e) {}
       }
     };
-    tryCurrent();
+    init();
   }, [uid]);
 
-  const canCheckin = () => {
-    if (!last) return true;
-    try {
-      const lastTs = new Date(last.occurredAt).getTime();
-      return Date.now() - lastTs > (2 * 60 * 60 * 1000); // 2 hours
-    } catch (e) {
-      return true;
-    }
-  };
-
-  const addCheckin = async () => {
-    if (!uid) return;
-    if (!canCheckin()) return;
-    try {
-      const resp = await checkinApi.addCheckin(uid);
-      setLast(resp.data);
-      // reload list
-      await loadMyCheckins(activeTab);
-    } catch (e) {
-      console.error('Failed to add checkin', e);
-    }
-  };
-
-  const loadMyCheckins = async (tab: typeof activeTab = 'recent') => {
+  // Fetch full checkin history once — no re-fetch on month change
+  const loadCheckins = async () => {
     if (!uid) return;
     setLoading(true);
     try {
-      if (tab === 'recent') {
-        const resp = await checkinApi.recent(200, uid);
-        const mine = resp.data || [];
-        mine.sort((a: any,b:any)=> new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime());
-        setList(mine);
-        setLast(mine[0] || null);
-      } else {
-        const end = format(new Date(), 'yyyy-MM-dd');
-        let startDate = new Date();
-        if (tab === 'today') startDate = new Date();
-        if (tab === '7') startDate = subDays(new Date(), 7);
-        if (tab === '30') startDate = subDays(new Date(), 30);
-        const start = format(startDate, 'yyyy-MM-dd');
-        const resp = await checkinApi.between(start, end, uid);
-        const mine = resp.data || [];
-        mine.sort((a: any,b:any)=> new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime());
-        setList(mine);
-        setLast(mine[0] || null);
-      }
+      const resp = await checkinApi.recent(500, uid);
+      const data: any[] = resp.data || [];
+      setCheckins(data);
+      const sorted = [...data].sort(
+        (a, b) => new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime()
+      );
+      setLast(sorted[0] || null);
     } catch (e) {
       console.error('Failed to load checkins', e);
     } finally {
@@ -90,97 +61,173 @@ export default function CheckinPage() {
     }
   };
 
-  useEffect(()=>{
-    if (!uid) return;
-    // load last checkin (authoritative from DB)
-    (async () => {
-      try {
-        const resp = await checkinApi.recent(1, uid);
-        const mine = resp.data || [];
-        setLast(mine[0] || null);
-      } catch (e) {
-        // ignore - fallback to list
-      }
-      await loadMyCheckins(activeTab);
-    })();
-  }, [uid, activeTab]);
+  useEffect(() => {
+    if (uid) loadCheckins();
+  }, [uid]);
 
-  // compute days active in last 30 days for this user
-  const computeDaysActive30 = () => {
-    const cutoff = subDays(new Date(), 30).setHours(0,0,0,0);
-    const days = new Set<string>();
-    list.forEach(c => {
-      try {
-        const d = new Date(c.occurredAt);
-        if (d.getTime() >= cutoff) {
-          days.add(d.toISOString().split('T')[0]);
-        }
-      } catch (e) {}
-    });
-    return days.size;
+  const handleMonthChange = (month: Date) => {
+    setCurrentMonth(month); // data already loaded — just switch view
   };
 
+  const canCheckin = () => {
+    if (!last) return true;
+    try {
+      return Date.now() - new Date(last.occurredAt).getTime() > 2 * 60 * 60 * 1000;
+    } catch { return true; }
+  };
+
+  const doCheckin = async () => {
+    if (!uid || !canCheckin()) return;
+    setChecking(true);
+    try {
+      const resp = await checkinApi.addCheckin(uid);
+      setLast(resp.data);
+      await loadCheckins();
+      toast({ title: 'Checked in!', description: 'Your attendance has been recorded.' });
+    } catch (e) {
+      toast({ title: 'Error', description: 'Failed to check in. Please try again.', variant: 'destructive' });
+    } finally {
+      setChecking(false);
+    }
+  };
+
+  const { checkedInDates, missedDates, daysActive30, todayCheckedIn } = useMemo(() => {
+    const checkedSet = new Set<string>();
+    checkins.forEach((c: any) => {
+      try { checkedSet.add(format(new Date(c.occurredAt), 'yyyy-MM-dd')); } catch {}
+    });
+
+    const checkedInDates: Date[] = [];
+    checkedSet.forEach(d => { try { checkedInDates.push(parseISO(d)); } catch {} });
+
+    // Find the first ever check-in date — missed days start from there
+    const sortedKeys = [...checkedSet].sort();
+    const firstCheckinDate = sortedKeys.length > 0 ? startOfDay(parseISO(sortedKeys[0])) : null;
+
+    // Missed = past days from first checkin to yesterday with no check-in
+    const missedDates: Date[] = [];
+    if (firstCheckinDate) {
+      const today = startOfDay(new Date());
+      let cursor = new Date(firstCheckinDate);
+      while (isBefore(cursor, today)) {
+        if (!checkedSet.has(format(cursor, 'yyyy-MM-dd'))) {
+          missedDates.push(new Date(cursor));
+        }
+        cursor = addDays(cursor, 1);
+      }
+    }
+
+    const cutoff30 = subDays(new Date(), 30);
+    const daysActive30 = [...checkedSet].filter(d => parseISO(d) >= cutoff30).length;
+    const todayCheckedIn = checkedSet.has(format(new Date(), 'yyyy-MM-dd'));
+
+    return { checkedInDates, missedDates, daysActive30, todayCheckedIn };
+  }, [checkins]);
+
   return (
-    <div className="min-h-screen  text-white">
-      <div className=" bg-lb-darker min-h-screen p-6 mx-auto">
-        <h2 className="text-lg font-semibold mb-6">Checkin</h2>
-
-        {/* User Info */}
-        <div className="mb-4">
-          <div className="text-sm text-white/80">User</div>
-          <div className="text-lg font-medium">{name || 'Unknown'}</div>
-          <div className="text-sm text-white/70 mt-1">
-            Last checked: {last ? format(new Date(last.occurredAt), 'yyyy-MM-dd HH:mm') : '—'}
+    <div className="space-y-6">
+      <PageBanner
+        title="Attendance"
+        subtitle={name || 'Track your gym check-ins'}
+        imageUrl="https://images.unsplash.com/photo-1571019614242-c5c5dee9f50b?w=1200&q=80&auto=format&fit=crop"
+      />
+      {/* Check-in action row */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-center">
+        <div />
+        {todayCheckedIn ? (
+          <div className="flex items-center gap-2 text-green-400 text-sm font-medium bg-green-500/10 border border-green-500/20 rounded-lg px-4 py-2 w-full sm:w-auto justify-center">
+            <CheckCircle className="h-4 w-4" />
+            Checked In Today
           </div>
-        </div>
-
-        {/* Tabs and Button */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
-          <div className="flex bg-white/5 rounded p-1">
-            {['recent','today','7','30'].map(tab => (
-              <button
-                key={tab}
-                onClick={() => setActiveTab(tab as any)}
-                className={`px-3 py-2 text-sm rounded ${
-                  activeTab === tab ? 'bg-lb-accent text-white' : 'text-white/80 hover:text-white'
-                }`}
-              >
-                {tab === 'recent' ? 'Recent' : tab === 'today' ? 'Today' : tab === '7' ? '7 days' : '30 days'}
-              </button>
-            ))}
-          </div>
-          <button
-            className={`btn ${canCheckin() ? 'bg-lb-accent hover:bg-lb-accent/90' : 'bg-white/10 cursor-not-allowed'} text-white px-4 py-2 rounded`}
-            onClick={addCheckin}
-            disabled={!canCheckin()}
+        ) : (
+          <Button
+            onClick={doCheckin}
+            disabled={checking || !uid}
+            className="w-full sm:w-auto flex items-center justify-center gap-2 bg-lb-accent hover:bg-lb-accent/90 text-white"
           >
-            {canCheckin() ? 'Checkin' : 'Checked recently'}
-          </button>
-        </div>
-
-        {/* Stats */}
-        <div className="mb-4 text-sm text-white/80">
-          Days active (30d): <span className="font-medium text-white">{computeDaysActive30()}</span>
-        </div>
-
-        {/* List */}
-        <div className="mt-4 bg-white/3 p-3 rounded max-h-96 overflow-y-auto">
-          <h3 className="font-medium mb-2 text-white">Recent checkins</h3>
-          {loading ? (
-            <div className="text-white/80 py-4">Loading...</div>
-          ) : list.length > 0 ? (
-            <ul className="divide-y divide-white/10">
-              {list.map(c => (
-                <li key={c.id} className="py-2 text-white/90">
-                  {format(new Date(c.occurredAt), 'yyyy-MM-dd HH:mm')}
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <div className="text-white/80 py-4">No checkins found.</div>
-          )}
-        </div>
+            <CheckCircle className="h-4 w-4" />
+            {checking ? 'Checking in...' : 'Check In Now'}
+          </Button>
+        )}
       </div>
+
+      {/* Stats */}
+      <div className="grid grid-cols-3 gap-3">
+        <Card className="glass-card p-4">
+          <p className="text-xs text-gray-400 mb-1">Days Active</p>
+          <p className="text-2xl font-bold text-white">{daysActive30}</p>
+          <p className="text-xs text-gray-500">last 30 days</p>
+        </Card>
+        <Card className="glass-card p-4">
+          <p className="text-xs text-gray-400 mb-1">Today</p>
+          <p className={`text-sm font-semibold mt-2 ${todayCheckedIn ? 'text-green-400' : 'text-gray-500'}`}>
+            {todayCheckedIn ? '✓ Done' : 'Pending'}
+          </p>
+        </Card>
+        <Card className="glass-card p-4">
+          <p className="text-xs text-gray-400 mb-1">Last Checkin</p>
+          <p className="text-xs font-medium text-white mt-2 leading-relaxed">
+            {last ? format(new Date(last.occurredAt), 'MMM dd, HH:mm') : '—'}
+          </p>
+        </Card>
+      </div>
+
+      {/* Calendar */}
+      <Card className="glass-card p-4 sm:p-6">
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+          <div className="flex items-center gap-2">
+            <CalendarDays className="h-4 w-4 text-lb-accent" />
+            <h2 className="text-sm font-semibold text-white">Attendance Calendar</h2>
+          </div>
+          <div className="flex items-center gap-4 text-xs text-gray-400">
+            <span className="flex items-center gap-1.5">
+              <span className="w-2.5 h-2.5 rounded-full bg-green-500 inline-block shrink-0" />
+              Checked in
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="w-2.5 h-2.5 rounded-full bg-red-500 inline-block shrink-0" />
+              Missed
+            </span>
+          </div>
+        </div>
+
+        {loading ? (
+          <div className="flex justify-center py-12">
+            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-lb-accent" />
+          </div>
+        ) : (
+          <div className="flex justify-center">
+            <Calendar
+              mode="single"
+              month={currentMonth}
+              onMonthChange={handleMonthChange}
+              selected={undefined}
+              onSelect={() => {}}
+              modifiers={{
+                checkedIn: checkedInDates,
+                missed: missedDates,
+              }}
+              modifiersStyles={{
+                checkedIn: {
+                  backgroundColor: '#22c55e',
+                  borderRadius: '50%',
+                  color: '#ffffff',
+                  fontWeight: '700',
+                  transform: 'scale(0.72)',
+                },
+                missed: {
+                  backgroundColor: '#ef4444',
+                  borderRadius: '50%',
+                  color: '#ffffff',
+                  opacity: 0.7,
+                  transform: 'scale(0.72)',
+                },
+              }}
+              className="w-full"
+            />
+          </div>
+        )}
+      </Card>
     </div>
   );
 }
